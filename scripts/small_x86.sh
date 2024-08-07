@@ -22,7 +22,7 @@ sed -i 's@.*CYXluq4wUazHjmCDBCqXF*@#&@g' package/lean/default-settings/files/zzz
 # 删除低版本smartdns
 #rm -rf feeds/packages/net/smartdns
 
-rm -rf feeds/packages/lang/ruby
+#rm -rf feeds/packages/lang/ruby
 
 ###### Git稀疏克隆
 # 参数1是分支名, 参数2是仓库地址, 参数3是子目录，同一个仓库下载多个文件夹直接在后面跟文件名或路径，空格分开
@@ -37,7 +37,7 @@ function git_sparse_clone() {
 
 ###### 添加新版本golang
 #git clone --depth=1 -b 22.x https://github.com/sbwml/packages_lang_golang feeds/packages/lang/golang
-git clone --depth=1 -b main https://github.com/free-diy/packages_ruby feeds/packages/lang/ruby
+#git clone --depth=1 -b main https://github.com/free-diy/packages_ruby feeds/packages/lang/ruby
 ##### Themes
 # 拉取argon主题
 #git clone --depth=1 -b 18.06 https://github.com/jerrykuku/luci-theme-argon package/luci-theme-argon
@@ -72,10 +72,10 @@ git clone --depth=1 -b main https://github.com/free-diy/packages_ruby feeds/pack
 # 添加ddns-go
 #git clone --depth=1 https://github.com/sirpdboy/luci-app-ddns-go package/ddns-go
 # 设备关机功能
-git clone --depth=1 https://github.com/sirpdboy/luci-app-poweroffdevice package/luci-app-poweroffdevice
+#git clone --depth=1 https://github.com/sirpdboy/luci-app-poweroffdevice package/luci-app-poweroffdevice
 # 添加istore
-git_sparse_clone main https://github.com/linkease/istore-ui app-store-ui
-git_sparse_clone main https://github.com/linkease/istore luci
+#git_sparse_clone main https://github.com/linkease/istore-ui app-store-ui
+#git_sparse_clone main https://github.com/linkease/istore luci
 # 添加应用管理
 #git clone --depth=1 -b master https://github.com/destan19/OpenAppFilter package/OpenAppFilter
 # 添加vssr
@@ -83,8 +83,8 @@ git_sparse_clone main https://github.com/linkease/istore luci
 #git clone --depth=1 https://github.com/free-diy/luci-app-vssr package/luci-app-vssr
 
 # 科学上网插件
-git clone --depth=1 -b master https://github.com/fw876/helloworld package/luci-app-ssr-plus
+#git clone --depth=1 -b master https://github.com/fw876/helloworld package/luci-app-ssr-plus
 #git clone --depth=1 -b main https://github.com/xiaorouji/openwrt-passwall-packages package/openwrt-passwall
 #git clone --depth=1 -b main https://github.com/xiaorouji/openwrt-passwall package/luci-app-passwall
-git clone --depth=1 -b main https://github.com/xiaorouji/openwrt-passwall2 package/luci-app-passwall2
+#git clone --depth=1 -b main https://github.com/xiaorouji/openwrt-passwall2 package/luci-app-passwall2
 #git_sparse_clone master https://github.com/vernesong/OpenClash luci-app-openclash
