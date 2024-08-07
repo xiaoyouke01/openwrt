@@ -7,9 +7,9 @@ sed -i 's/192.168.1.1/192.168.100.252/g' package/base-files/files/bin/config_gen
 ########### 设置密码为空（可选） ###########
 sed -i 's@.*CYXluq4wUazHjmCDBCqXF*@#&@g' package/lean/default-settings/files/zzz-default-settings
 
-##### 移除要替换的包
+###### 移除要替换的包
 # 删除老argon
-rm -rf feeds/luci/themes/luci-theme-argon
+#rm -rf feeds/luci/themes/luci-theme-argon
 # 删除英文版netdata
 #rm -rf feeds/luci/applications/luci-app-netdata
 # 删除低版本golang
@@ -21,9 +21,10 @@ rm -rf feeds/luci/themes/luci-theme-argon
 #rm -rf feeds/luci/applications/luci-app-mosdns
 # 删除低版本smartdns
 #rm -rf feeds/packages/net/smartdns
-#rm -rf feeds/packages/lang/ruby
 
-##### Git稀疏克隆
+rm -rf feeds/packages/lang/ruby
+
+###### Git稀疏克隆
 # 参数1是分支名, 参数2是仓库地址, 参数3是子目录，同一个仓库下载多个文件夹直接在后面跟文件名或路径，空格分开
 function git_sparse_clone() {
   branch="$1" repourl="$2" && shift 2
@@ -34,22 +35,22 @@ function git_sparse_clone() {
   cd .. && rm -rf $repodir
 }
 
-##### 添加新版本golang
+###### 添加新版本golang
 #git clone --depth=1 -b 22.x https://github.com/sbwml/packages_lang_golang feeds/packages/lang/golang
-#git clone --depth=1 -b main https://github.com/free-diy/packages_ruby feeds/packages/lang/ruby
+git clone --depth=1 -b main https://github.com/free-diy/packages_ruby feeds/packages/lang/ruby
 ##### Themes
 # 拉取argon主题
-git clone --depth=1 -b 18.06 https://github.com/jerrykuku/luci-theme-argon package/luci-theme-argon
+#git clone --depth=1 -b 18.06 https://github.com/jerrykuku/luci-theme-argon package/luci-theme-argon
 # 拉取酷猫主题
 #git clone --depth=1 -b main https://github.com/sirpdboy/luci-theme-kucat package/luci-theme-kucat
 
-##### 添加额外插件
+###### 添加额外插件
 # 拉取中文版netdata
 #git clone --depth=1 -b master https://github.com/sirpdboy/luci-app-netdata package/luci-app-netdata
 # 添加Lucky
 #git clone --depth=1 https://github.com/sirpdboy/luci-app-lucky.git package/lucky
 # 添加系统高级设置加强版
-git clone --depth=1 -b main https://github.com/sirpdboy/luci-app-advancedplus package/luci-app-advancedplus
+#git clone --depth=1 -b main https://github.com/sirpdboy/luci-app-advancedplus package/luci-app-advancedplus
 # 拉取定时设置
 #git clone --depth=1 https://github.com/sirpdboy/luci-app-autotimeset package/luci-app-autotimeset
 # eqosplus定时限速
@@ -67,7 +68,7 @@ git clone --depth=1 -b main https://github.com/sirpdboy/luci-app-advancedplus pa
 # 添加adguardhome
 #git_sparse_clone main https://github.com/kenzok8/small-package luci-app-adguardhome
 # 添加bypass，文件管理助手
-git_sparse_clone main https://github.com/kenzok8/small-package luci-app-bypass lua-maxminddb luci-app-fileassistant
+#git_sparse_clone main https://github.com/kenzok8/small-package luci-app-bypass
 # 添加ddns-go
 #git clone --depth=1 https://github.com/sirpdboy/luci-app-ddns-go package/ddns-go
 # 设备关机功能
@@ -83,7 +84,7 @@ git_sparse_clone main https://github.com/linkease/istore luci
 
 # 科学上网插件
 git clone --depth=1 -b master https://github.com/fw876/helloworld package/luci-app-ssr-plus
-git clone --depth=1 -b main https://github.com/xiaorouji/openwrt-passwall-packages package/openwrt-passwall
-git clone --depth=1 -b main https://github.com/xiaorouji/openwrt-passwall package/luci-app-passwall
+#git clone --depth=1 -b main https://github.com/xiaorouji/openwrt-passwall-packages package/openwrt-passwall
+#git clone --depth=1 -b main https://github.com/xiaorouji/openwrt-passwall package/luci-app-passwall
 git clone --depth=1 -b main https://github.com/xiaorouji/openwrt-passwall2 package/luci-app-passwall2
-git_sparse_clone master https://github.com/vernesong/OpenClash luci-app-openclash
+#git_sparse_clone master https://github.com/vernesong/OpenClash luci-app-openclash
