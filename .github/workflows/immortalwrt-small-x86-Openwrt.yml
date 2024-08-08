@@ -1,4 +1,4 @@
-name: small-x86-Openwrt
+name: immortalwrt-small-x86-Openwrt
 
 on:
   workflow_dispatch:
