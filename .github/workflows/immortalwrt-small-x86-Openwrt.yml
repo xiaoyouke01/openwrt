@@ -7,14 +7,14 @@ env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
   REPO_BRANCH: openwrt-23.05
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: configs/small_x86.config
+  CONFIG_FILE: configs/immortalwrt_small_x86.config
   DIY_P1_SH: diy-part1.sh
-  DIY_P2_SH: scripts/small_x86.sh
+  DIY_P2_SH: scripts/immortalwrt_small_x86.sh
   CLASH_KERNEL: amd64
   CACHE_TOOLCHAIN: true
   UPLOAD_BIN_DIR: false
   FIRMWARE_RELEASE: true
-  FIRMWARE_TAG: small-x86
+  FIRMWARE_TAG: immortalwrt-small-x86
   TZ: Asia/Shanghai
 
 jobs:
