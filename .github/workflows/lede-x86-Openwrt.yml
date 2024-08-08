@@ -1,4 +1,4 @@
-name: x86-Openwrt
+name: lede-x86-Openwrt
 
 on:
   workflow_dispatch:
