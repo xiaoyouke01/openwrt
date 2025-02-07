@@ -1,4 +1,4 @@
-name: immortalwrt-x86-Openwrt
+name: immortalwrt-24.10-x86
 on:
   workflow_dispatch:
 
@@ -6,14 +6,14 @@ env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
   REPO_BRANCH: openwrt-24.10
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: configs/immortalwrt_x86.config
-  DIY_P1_SH: diy-part1.sh
-  DIY_P2_SH: scripts/immortalwrt_x86.sh
+  CONFIG_FILE: configs/immortalwrt_24.10_x86.config
+  DIY_P1_SH: scripts/sh/immortalwrt_diy-part1.sh
+  DIY_P2_SH: scripts/immortalwrt_24.10_x86.sh
   CLASH_KERNEL: amd64
   CACHE_TOOLCHAIN: true
   UPLOAD_BIN_DIR: false
   FIRMWARE_RELEASE: true
-  FIRMWARE_TAG: immortalwrt-x86
+  FIRMWARE_TAG: immortalwrt-24.10-x86
   TZ: Asia/Shanghai
 
 jobs:
@@ -44,7 +44,7 @@ jobs:
         sudo -E apt -qq purge azure-cli docker* ghc* zulu* hhvm* llvm* firefox google* dotnet* aspnetcore* powershell openjdk* adoptopenjdk* mysql* php* mongodb* moby* snap* || true -y
         sudo -E apt -qq update -y
         sudo -E apt -qq full-upgrade -y
-        sudo -E apt -qq install $(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu_2204) -y
+        sudo -E apt -qq install $(curl -fsSL https://raw.githubusercontent.com/xiaoyouke01/openwrt/refs/heads/main/depends_ubuntu_2204) -y
         sudo -E systemctl daemon-reload
         sudo -E apt -qq autoremove --purge -y
         sudo -E apt -qq clean -y
