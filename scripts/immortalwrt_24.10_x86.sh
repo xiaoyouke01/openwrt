@@ -36,7 +36,7 @@ git clone --depth=1 -b master https://github.com/jerrykuku/luci-app-argon-config
 # 添加Lucky
 git clone --depth=1 -b main https://github.com/gdy666/luci-app-lucky package/lucky
 # 添加系统高级设置
-git clone --depth=1 -b master https://github.com/sirpdboy/luci-app-advancedplus package/luci-app-advancedplus
+git clone --depth=1 -b main https://github.com/sirpdboy/luci-app-advancedplus package/luci-app-advancedplus
 # 拉取taskplan定时设置插件
 git clone --depth=1 -b master https://github.com/sirpdboy/luci-app-taskplan package/luci-app-taskplan
 # 设备关机功能
