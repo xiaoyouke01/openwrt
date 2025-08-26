@@ -40,7 +40,7 @@ git clone --depth=1 -b master https://github.com/sirpdboy/luci-app-advancedplus 
 # 拉取taskplan定时设置插件
 git clone --depth=1 -b master https://github.com/sirpdboy/luci-app-taskplan package/luci-app-taskplan
 # 设备关机功能
-git clone --depth=1 -b js https://github.com/sirpdboy/luci-app-poweroffdevice package/luci-app-poweroffdevice
+git_sparse_clone js https://github.com/sirpdboy/luci-app-poweroffdevice luci-app-poweroffdevice
 # 添加adguardhome,bypass，文件管理助手等
 #luci-app-adguardhome luci-app-homeproxy
 #git_sparse_clone main https://github.com/kenzok8/small-package luci-app-bypass luci-app-fileassistant luci-app-filebrowser luci-app-timecontrol luci-app-control-timewol
@@ -56,7 +56,7 @@ git_sparse_clone main https://github.com/linkease/istore luci
 # 添加ssrplus
 #git clone --depth=1 -b master https://github.com/fw876/helloworld package/luci-app-ssr-plus
 git clone --depth=1 -b main https://github.com/xiaorouji/openwrt-passwall-packages package/openwrt-passwall
-git clone --depth=1 -b main https://github.com/xiaorouji/openwrt-passwall package/luci-app-passwall
-#git clone --depth=1 -b main https://github.com/xiaorouji/openwrt-passwall2 package/luci-app-passwall2
+git_sparse_clone main https://github.com/xiaorouji/openwrt-passwall luci-app-passwall
+#git_sparse_clone main https://github.com/xiaorouji/openwrt-passwall2 luci-app-passwall2
 # 添加应用管理
 #git clone --depth=1 -b master https://github.com/destan19/OpenAppFilter package/OpenAppFilter
