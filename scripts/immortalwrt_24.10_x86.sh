@@ -44,6 +44,7 @@ git clone --depth=1 -b master https://github.com/sirpdboy/luci-app-taskplan pack
 git_sparse_clone js https://github.com/sirpdboy/luci-app-poweroffdevice luci-app-poweroffdevice
 # 添加ssrplus
 git_sparse_clone master https://github.com/fw876/helloworld luci-app-ssr-plus
+git_sparse_clone master https://github.com/fw876/helloworld dns2socks-rust
 # 添加adguardhome,bypass，文件管理助手等
 #luci-app-adguardhome luci-app-homeproxy
 #git_sparse_clone main https://github.com/kenzok8/small-package luci-app-bypass luci-app-fileassistant luci-app-filebrowser luci-app-timecontrol luci-app-control-timewol
