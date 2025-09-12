@@ -43,7 +43,7 @@ git clone --depth=1 -b master https://github.com/sirpdboy/luci-app-taskplan pack
 # 设备关机功能
 git_sparse_clone js https://github.com/sirpdboy/luci-app-poweroffdevice luci-app-poweroffdevice
 # 添加ssrplus
-git_sparse_clone master https://github.com/fw876/helloworld luci-app-ssr-plus dns2socks-rust
+#git_sparse_clone master https://github.com/fw876/helloworld luci-app-ssr-plus dns2socks-rust
 # 添加adguardhome,bypass，文件管理助手等
 #luci-app-adguardhome luci-app-homeproxy
 #git_sparse_clone main https://github.com/kenzok8/small-package luci-app-bypass luci-app-fileassistant luci-app-filebrowser luci-app-timecontrol luci-app-control-timewol
@@ -57,7 +57,7 @@ git_sparse_clone master https://github.com/vernesong/OpenClash luci-app-openclas
 git_sparse_clone main https://github.com/linkease/istore-ui app-store-ui
 git_sparse_clone main https://github.com/linkease/istore luci
 # 添加ssrplus
-#git clone --depth=1 -b master https://github.com/fw876/helloworld package/luci-app-ssr-plus
+git clone --depth=1 -b master https://github.com/fw876/helloworld.git package/helloworld
 git clone --depth=1 -b main https://github.com/xiaorouji/openwrt-passwall-packages package/openwrt-passwall
 git_sparse_clone main https://github.com/xiaorouji/openwrt-passwall luci-app-passwall
 #git_sparse_clone main https://github.com/xiaorouji/openwrt-passwall2 luci-app-passwall2
