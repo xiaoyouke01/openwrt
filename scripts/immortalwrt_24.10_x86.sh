@@ -12,6 +12,7 @@ rm -rf feeds/luci/applications/luci-app-openclash
 rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-libev,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,trojan-plus,tuic-client,v2ray-plugin,xray-plugin,geoview,shadow-tls}
 rm -rf feeds/luci/applications/luci-app-passwall
 rm -rf feeds/packages/lang/golang
+rm -rf package/helloworld
 #rm -rf feeds/luci/applications/luci-app-netdata
 ##### Git稀疏克隆
 # 参数1是分支名, 参数2是仓库地址, 参数3是子目录，同一个仓库下载多个文件夹直接在后面跟文件名或路径，空格分开
@@ -41,6 +42,8 @@ git clone --depth=1 -b main https://github.com/sirpdboy/luci-app-advancedplus pa
 git clone --depth=1 -b master https://github.com/sirpdboy/luci-app-taskplan package/luci-app-taskplan
 # 设备关机功能
 git_sparse_clone js https://github.com/sirpdboy/luci-app-poweroffdevice luci-app-poweroffdevice
+# 添加ssrplus
+git_sparse_clone master https://github.com/fw876/helloworld.git luci-app-ssr-plus
 # 添加adguardhome,bypass，文件管理助手等
 #luci-app-adguardhome luci-app-homeproxy
 #git_sparse_clone main https://github.com/kenzok8/small-package luci-app-bypass luci-app-fileassistant luci-app-filebrowser luci-app-timecontrol luci-app-control-timewol
