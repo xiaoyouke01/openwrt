@@ -60,4 +60,4 @@ git_sparse_clone main https://github.com/Openwrt-Passwall/openwrt-passwall luci-
 #git_sparse_clone main https://github.com/Openwrt-Passwall/openwrt-passwall2 luci-app-passwall2
 # 添加应用管理
 #git clone --depth=1 -b master https://github.com/destan19/OpenAppFilter package/OpenAppFilter
-#sed -i 's/ci-llvm=true/ci-llvm=false/g' feeds/packages/lang/rust/Makefile
+sed -i 's/ci-llvm=true/ci-llvm=false/g' feeds/packages/lang/rust/Makefile
