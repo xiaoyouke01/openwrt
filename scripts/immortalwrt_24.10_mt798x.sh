@@ -40,7 +40,7 @@ git clone --depth=1 -b main https://github.com/sirpdboy/luci-app-advancedplus pa
 # 拉取taskplan定时设置插件
 git_sparse_clone main https://github.com/sirpdboy/luci-app-taskplan luci-app-taskplan
 # 设备关机功能
-git_sparse_clone master https://github.com/sirpdboy/luci-app-poweroffdevice luci-app-poweroffdevice
+#git_sparse_clone master https://github.com/sirpdboy/luci-app-poweroffdevice luci-app-poweroffdevice
 # 添加adguardhome,bypass，文件管理助手等
 #luci-app-adguardhome luci-app-homeproxy
 #git_sparse_clone main https://github.com/kenzok8/small-package luci-app-bypass luci-app-fileassistant luci-app-filebrowser luci-app-timecontrol luci-app-control-timewol
@@ -60,4 +60,4 @@ git_sparse_clone main https://github.com/Openwrt-Passwall/openwrt-passwall luci-
 #git_sparse_clone main https://github.com/Openwrt-Passwall/openwrt-passwall2 luci-app-passwall2
 # 添加应用管理
 #git clone --depth=1 -b master https://github.com/destan19/OpenAppFilter package/OpenAppFilter
-sed -i 's/ci-llvm=true/ci-llvm=false/g' feeds/packages/lang/rust/Makefile
+sed -i 's/ci-llvm=true/ci-llvm=false/g' $OPENWRT_PATH/feeds/packages/lang/rust/Makefile
