@@ -38,7 +38,7 @@ git clone --depth=1 -b main https://github.com/gdy666/luci-app-lucky package/luc
 # 添加系统高级设置
 git clone --depth=1 -b main https://github.com/sirpdboy/luci-app-advancedplus package/luci-app-advancedplus
 # 拉取taskplan定时设置插件
-git_sparse_clone master https://github.com/sirpdboy/luci-app-taskplan luci-app-taskplan
+git_sparse_clone main https://github.com/sirpdboy/luci-app-taskplan luci-app-taskplan
 # 设备关机功能
 git_sparse_clone master https://github.com/sirpdboy/luci-app-poweroffdevice luci-app-poweroffdevice
 # 添加adguardhome,bypass，文件管理助手等
