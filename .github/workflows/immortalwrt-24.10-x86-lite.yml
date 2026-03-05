@@ -139,7 +139,7 @@ jobs:
       run: |
         cd $OPENWRT_PATH/bin/targets/*/*
         # 容错性清理
-        rm -rf packages *.buildinfo *.manifest *kernel.bin *rootfs.img.gz profiles.json sha256sums
+        find . -maxdepth 1 ! -name '*squashfs-combined-efi.img.gz' ! -name '.' -delete
         echo "FIRMWARE_PATH=$PWD" >> $GITHUB_ENV
 
     - name: Upload Firmware To Release
