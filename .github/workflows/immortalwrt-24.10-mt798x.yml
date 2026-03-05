@@ -3,8 +3,8 @@ on:
   workflow_dispatch:
 
 env:
-  REPO_URL: https://github.com/immortalwrt/immortalwrt
-  REPO_BRANCH: openwrt-24.10
+  REPO_URL: https://github.com/padavanonly/immortalwrt-mt798x-6.6
+  REPO_BRANCH: openwrt-24.10-6.6
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: configs/immortalwrt_24.10_mt798x.config
   DIY_P1_SH: scripts/sh/immortalwrt_diy-part1.sh
@@ -137,7 +137,7 @@ jobs:
       run: |
         cd $OPENWRT_PATH/bin/targets/*/*
         # 容错性清理
-        rm -rf packages *.buildinfo *.manifest *rootfs.img.gz profiles.json sha256sums
+        find . -maxdepth 1 ! -name '*squashfs-sysupgrade.bin' ! -name '.' -delete
         echo "FIRMWARE_PATH=$PWD" >> $GITHUB_ENV
 
     - name: Upload Firmware To Release
