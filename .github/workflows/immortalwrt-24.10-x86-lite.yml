@@ -25,11 +25,8 @@ jobs:
       contents: write
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
 
-    # 新增：深度清理磁盘空间
-    - name: 深度清理磁盘空间 (Maximize Build Space)
+    - name: Free Disk Space (Ubuntu)
       uses: jlumbroso/free-disk-space@main
       with:
         tool-cache: true
@@ -37,19 +34,24 @@ jobs:
         dotnet: true
         haskell: true
         large-packages: true
-        docker-images: true
-        # 注意：这里设为 false 保留 Swap，防止多线程编译时内存溢出(OOM)
-        swap-storage: false 
+        swap-storage: true
 
-    - name: 环境清理与依赖安装
+    - name: Checkout
+      uses: actions/checkout@main
+
+    - name: 安装编译环境
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        # 配合上面的 Action，进一步清理可能残留的无用依赖
-        sudo -E apt-get -qq update
-        sudo -E apt-get -qq install $(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu_2204) -y
-        sudo -E apt-get -qq autoremove --purge
-        sudo -E apt-get -qq clean
+        sudo rm -rf /usr/share/dotnet /etc/apt/sources.list.d/* /usr/local/lib/android /opt/ghc /etc/mysql /etc/php /usr/local/graalvm /usr/local/.ghcup \
+        /usr/local/share/powershell /usr/local/share/chromium /usr/local/lib/node_modules $AGENT_TOOLSDIRECTORY
+        sudo -E apt -qq purge azure-cli docker* ghc* zulu* hhvm* llvm* firefox google* dotnet* aspnetcore* powershell openjdk* adoptopenjdk* mysql* php* mongodb* moby* snap* || true -y
+        sudo -E apt -qq update -y
+        sudo -E apt -qq full-upgrade -y
+        sudo -E apt -qq install $(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu_2204) -y
+        sudo -E systemctl daemon-reload
+        sudo -E apt -qq autoremove --purge -y
+        sudo -E apt -qq clean -y
         sudo timedatectl set-timezone "$TZ"
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
