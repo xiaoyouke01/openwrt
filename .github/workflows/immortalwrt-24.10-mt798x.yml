@@ -100,9 +100,24 @@ jobs:
     - name: 整理编译产物
       if: steps.compile.outputs.status == 'success'
       run: |
+        # 进入目标目录
         cd $REPO_NAME/bin/targets/*/*
-        # 仅保留 sysupgrade 包，更干净
-        rm -rf packages
+        
+        # 创建一个临时存放目录
+        mkdir -p backup_firmware
+        
+        # 仅移动你需要的 squashfs-sysupgrade.bin 文件到临时目录
+        # 如果有多个（比如不同后缀），这行会全部抓取
+        cp *squashfs-sysupgrade.bin backup_firmware/ 2>/dev/null || true
+        
+        # 删除当前目录下除了 backup_firmware 以外的所有东西
+        # 这样可以避开直接删除 packages 文件夹可能遇到的权限或占用问题
+        find . -maxdepth 1 ! -name 'backup_firmware' ! -name '.' -exec rm -rf {} +
+        
+        # 把文件移回来，并删除临时目录
+        mv backup_firmware/* .
+        rm -rf backup_firmware
+        
         echo "FIRMWARE_PATH=$PWD" >> $GITHUB_ENV
 
     - name: 发布 Release
