@@ -1,4 +1,5 @@
 name: immortalwrt-24.10-x86-lite
+
 on:
   workflow_dispatch:
 
@@ -11,22 +12,21 @@ env:
   DIY_P2_SH: scripts/immortalwrt_24.10_x86.sh
   CLASH_KERNEL: amd64
   CACHE_TOOLCHAIN: true
-  UPLOAD_BIN_DIR: false
   FIRMWARE_RELEASE: true
-  # 【修改】使用英语精简版命名，并作为唯一识别前缀
   FIRMWARE_TAG: immortalwrt-24.10-x86-lite
   TZ: Asia/Shanghai
 
 jobs:
   build:
     runs-on: ubuntu-22.04
-    # 【检查点】必须拥有写入权限
     permissions:
       contents: write
 
     steps:
+    - name: Checkout
+      uses: actions/checkout@main
 
-    - name: Free Disk Space (Ubuntu)
+    - name: 极限释放磁盘空间
       uses: jlumbroso/free-disk-space@main
       with:
         tool-cache: true
@@ -36,53 +36,56 @@ jobs:
         large-packages: true
         swap-storage: true
 
-    - name: Checkout
-      uses: actions/checkout@main
-
-    - name: 安装编译环境
+    - name: 深度清理系统冗余 (含 Docker)
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        sudo rm -rf /usr/share/dotnet /etc/apt/sources.list.d/* /usr/local/lib/android /opt/ghc /etc/mysql /etc/php /usr/local/graalvm /usr/local/.ghcup \
-        /usr/local/share/powershell /usr/local/share/chromium /usr/local/lib/node_modules $AGENT_TOOLSDIRECTORY
-        sudo -E apt -qq purge azure-cli docker* ghc* zulu* hhvm* llvm* firefox google* dotnet* aspnetcore* powershell openjdk* adoptopenjdk* mysql* php* mongodb* moby* snap* || true -y
-        sudo -E apt -qq update -y
+        # 移除大块头预装环境
+        sudo docker image prune -a -f
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/powershell /usr/local/share/chromium /usr/local/lib/node_modules
+        sudo rm -rf /etc/mysql /etc/php /usr/local/graalvm /usr/local/.ghcup
+        
+        # 针对性清理 apt
+        sudo -E apt -qq update
+        sudo -E apt -qq purge azure-cli* docker* ghc* zulu* hhvm* llvm* firefox* google* dotnet* aspnetcore* powershell* openjdk* php* mongodb* moby* snap* -y
         sudo -E apt -qq full-upgrade -y
         sudo -E apt -qq install $(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu_2204) -y
-        sudo -E systemctl daemon-reload
-        sudo -E apt -qq autoremove --purge -y
-        sudo -E apt -qq clean -y
-        sudo timedatectl set-timezone "$TZ"
-        sudo mkdir -p /workdir
-        sudo chown $USER:$GROUPS /workdir
         
+        sudo -E apt -qq autoremove --purge -y
+        sudo -E apt -qq clean
+        sudo timedatectl set-timezone "$TZ"
+        
+        # 建立独立工作区 (利用根目录空间)
+        sudo mkdir -p /workdir
+        sudo chown $USER:$(id -gn) /workdir
+        echo "清理后可用空间："
+        df -h /
+
     - name: 下载固件源码
       working-directory: /workdir
       run: |
-        df -hT $PWD
         git clone -b $REPO_BRANCH --single-branch --filter=blob:none $REPO_URL openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
         cd openwrt
         echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
-        # 提取源码信息用于 Release 描述
-        echo "COMMIT_AUTHOR=$(git show -s --date=short --format="作者: %an")" >> $GITHUB_ENV
+        # 记录源码元数据
+        echo "COMMIT_AUTHOR=$(git show -s --date=short --format="%an")" >> $GITHUB_ENV
         echo "COMMIT_DATE=$(git show -s --date=short --format="%ci")" >> $GITHUB_ENV
-        echo "COMMIT_MESSAGE=$(git show -s --date=short --format="内容: %s")" >> $GITHUB_ENV
-        echo "COMMIT_HASH=$(git show -s --date=short --format="hash: %H")" >> $GITHUB_ENV
+        echo "COMMIT_MESSAGE=$(git show -s --date=short --format="%s")" >> $GITHUB_ENV
 
-    - name: Generate Variables
+    - name: 环境变量预处理
       run: |
-        cp $CONFIG_FILE $OPENWRT_PATH/.config
+        [ -e $CONFIG_FILE ] && cp $CONFIG_FILE $OPENWRT_PATH/.config
         cd $OPENWRT_PATH
         make defconfig > /dev/null 2>&1
-        SOURCE_REPO="$(echo $REPO_URL | awk -F '/' '{print $(NF)}')"
-        echo "SOURCE_REPO=$SOURCE_REPO" >> $GITHUB_ENV
-        DEVICE_TARGET=$(cat .config | grep CONFIG_TARGET_BOARD | awk -F '"' '{print $2}')
+        echo "SOURCE_REPO=$(echo $REPO_URL | awk -F '/' '{print $(NF)}')" >> $GITHUB_ENV
+        # 增加安全提取
+        DEVICE_TARGET=$(grep CONFIG_TARGET_BOARD .config | cut -d '"' -f2 || echo "x86")
         echo "DEVICE_TARGET=$DEVICE_TARGET" >> $GITHUB_ENV
-        DEVICE_SUBTARGET=$(cat .config | grep CONFIG_TARGET_SUBTARGET | awk -F '"' '{print $2}')
+        DEVICE_SUBTARGET=$(grep CONFIG_TARGET_SUBTARGET .config | cut -d '"' -f2 || echo "64")
         echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_ENV
 
-    - name: Cache Toolchain
+    - name: 缓存 Toolchain
       if: env.CACHE_TOOLCHAIN == 'true'
       uses: HiGarfield/cachewrtbuild@main
       with:
@@ -90,28 +93,27 @@ jobs:
         mixkey: ${{ env.SOURCE_REPO }}-${{ env.REPO_BRANCH }}-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}
         prefix: ${{ env.OPENWRT_PATH }}        
         
-    - name: 加载自定义设置
+    - name: 加载自定义设置 (Part 1)
       run: |
         [ -e $FEEDS_CONF ] && mv $FEEDS_CONF $OPENWRT_PATH/feeds.conf.default
         chmod +x $DIY_P1_SH
-        cd $OPENWRT_PATH
         $GITHUB_WORKSPACE/$DIY_P1_SH
         
-    - name: 下载插件
+    - name: 更新插件源
       run: |
         cd $OPENWRT_PATH
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
-    - name: 更改设置
+    - name: 更改设置 (Part 2)
       run: |
         [ -e files ] && mv files $OPENWRT_PATH/files
-        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE $OPENWRT_PATH/.config
+        [ -e $CONFIG_FILE ] && cp $CONFIG_FILE $OPENWRT_PATH/.config
         chmod +x $DIY_P2_SH
         cd $OPENWRT_PATH
         $GITHUB_WORKSPACE/$DIY_P2_SH
 
-    - name: 下载DL库
+    - name: 下载编译依赖库 (DL)
       id: package
       run: |
         cd $OPENWRT_PATH
@@ -120,65 +122,47 @@ jobs:
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
         
-    - name: 开始编译固件
+    - name: 开始编译固件 (极限多线程)
       id: compile
       run: |
         cd $OPENWRT_PATH
-        echo -e "$(nproc) thread compile"
+        echo -e "$(nproc) 线程编译开始..."
         make -j$(nproc) || make -j1 || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
-        echo "DATE=$(date +"%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
-        echo "FILE_DATE=$(date +"%Y.%m.%d")" >> $GITHUB_ENV
+        echo "DATE=$(date +"%Y-%m-%d %H:%M")" >> $GITHUB_ENV
         
-    - name: 查看磁盘使用情况
-      if: (!cancelled())
-      run: df -hT
-
-    - name: Organize files
+    - name: 整理成品文件
       if: steps.compile.outputs.status == 'success'
       run: |
         cd $OPENWRT_PATH/bin/targets/*/*
-        # 容错性清理
         rm -rf packages *.buildinfo *.manifest *kernel.bin *rootfs.img.gz profiles.json sha256sums
         echo "FIRMWARE_PATH=$PWD" >> $GITHUB_ENV
 
-    - name: Upload Firmware To Release
+    - name: 发布 Release
       if: steps.compile.outputs.status == 'success' && env.FIRMWARE_RELEASE == 'true'
       uses: ncipollo/release-action@v1
       with:
         name: R${{ env.DATE }} for ${{ env.FIRMWARE_TAG }}
-        # 【检查点】带编号的唯一 Tag，allowUpdates 为 false
         tag: ${{ env.FIRMWARE_TAG }}-${{ github.run_number }}
-        allowUpdates: false
         token: ${{ secrets.GITHUB_TOKEN }}
         artifacts: ${{ env.FIRMWARE_PATH }}/*
         body: |
-          **这是 ${{ env.FIRMWARE_TAG }} 的自动构建版本**
-          ### 📒 固件信息
-          - 💻 平台架构: ${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}
-          - 📅 源码日期: ${{ env.COMMIT_DATE }}
-          - ⚙️ 构建编号: ${{ github.run_number }}
-          - 🌐 默认地址: 192.168.100.252
-          - 🔑 默认密码: 空
+          **🔥 ImmortalWrt x86-Lite 自动构建**
+          - 📅 源码时间: ${{ env.COMMIT_DATE }}
+          - 📝 提交内容: ${{ env.COMMIT_MESSAGE }}
+          - 🚀 构建编号: ${{ github.run_number }}
+          - 🌐 默认后台: 192.168.100.252 (空密码)
 
-    - name: Cleanup Old Releases (Keep Last 3)
-      if: steps.compile.outputs.status == 'success' && env.FIRMWARE_RELEASE == 'true' && !cancelled()
+    - name: 历史版本清理 (保留 3 份)
+      if: steps.compile.outputs.status == 'success' && !cancelled()
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # 【检查点】健壮的排序与清理逻辑
-        RELEASES=$(gh release list --limit 100 --json tagName,createdAt --jq ".[] | select(.tagName | startswith(\"${{ env.FIRMWARE_TAG }}-\"))" | \
-                  jq -r -s 'sort_by(.createdAt) | reverse | .[].tagName')
-        
-        echo "检查属于 ${{ env.FIRMWARE_TAG }} 的历史版本..."
-        
+        RELEASES=$(gh release list --limit 100 --json tagName --jq ".[] | select(.tagName | startswith(\"${{ env.FIRMWARE_TAG }}-\")) | .tagName")
         COUNT=0
         for TAG in $RELEASES; do
           COUNT=$((COUNT + 1))
           if [ $COUNT -gt 3 ]; then
-            echo "🗑️ 正在清理第 $COUNT 个旧版本: $TAG"
             gh release delete "$TAG" --yes --cleanup-tag
-          else
-            echo "⭐ 保留最新版本: $TAG"
           fi
         done
