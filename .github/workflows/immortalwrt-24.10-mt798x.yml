@@ -37,30 +37,34 @@ jobs:
     - name: 下载固件源码
       run: |
         git clone -b $REPO_BRANCH --depth 1 $REPO_URL $REPO_NAME
-        echo "SDK_PATH=$GITHUB_WORKSPACE/$REPO_NAME" >> $GITHUB_ENV
 
     - name: Cache Feeds
       uses: actions/cache@v4
       with:
         path: ${{ env.REPO_NAME }}/feeds
-        key: ${{ runner.os }}-feeds-${{ hashFiles('**/feeds.conf.default') }}
+        # 精确匹配 feeds 配置文件，防止超时
+        key: ${{ runner.os }}-feeds-${{ hashFiles(format('{0}/feeds.conf.default', env.REPO_NAME)) }}
         restore-keys: ${{ runner.os }}-feeds-
 
     - name: 加载自定义设置 (Part 1)
       run: |
-        [ -e $FEEDS_CONF ] && cp -f $FEEDS_CONF $REPO_NAME/feeds.conf.default
-        chmod +x $DIY_P1_SH
-        cd $REPO_NAME
+        # 确保使用绝对路径，避免找不到文件
+        [ -e $GITHUB_WORKSPACE/$FEEDS_CONF ] && cp -f $GITHUB_WORKSPACE/$FEEDS_CONF $GITHUB_WORKSPACE/$REPO_NAME/feeds.conf.default
+        chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
+        # 必须进入源码目录后，再执行外部的自定义脚本
+        cd $GITHUB_WORKSPACE/$REPO_NAME
         $GITHUB_WORKSPACE/$DIY_P1_SH
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
     - name: 更改设置 (Part 2)
       run: |
-        [ -d files ] && cp -rf files $REPO_NAME/files
-        [ -f $CONFIG_FILE ] && cp -f $CONFIG_FILE $REPO_NAME/.config
-        chmod +x $DIY_P2_SH
-        cd $REPO_NAME
+        # 统一使用绝对路径挂载 files 和 config
+        [ -d $GITHUB_WORKSPACE/files ] && cp -rf $GITHUB_WORKSPACE/files $GITHUB_WORKSPACE/$REPO_NAME/files
+        [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp -f $GITHUB_WORKSPACE/$CONFIG_FILE $GITHUB_WORKSPACE/$REPO_NAME/.config
+        chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
+        # 必须进入源码目录执行，确保 sed 等替换命令正确工作
+        cd $GITHUB_WORKSPACE/$REPO_NAME
         $GITHUB_WORKSPACE/$DIY_P2_SH
         make defconfig
 
@@ -68,12 +72,13 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ${{ env.REPO_NAME }}/dl
-        key: ${{ runner.os }}-dl-${{ hashFiles('**/.config') }}
+        # 核心修复点：精确指向源码目录下的 .config，彻底解决 120 秒超时问题
+        key: ${{ runner.os }}-dl-${{ hashFiles(format('{0}/.config', env.REPO_NAME)) }}
         restore-keys: ${{ runner.os }}-dl-
 
     - name: 下载固件依赖包 (DL)
       run: |
-        cd $REPO_NAME
+        cd $GITHUB_WORKSPACE/$REPO_NAME
         make download -j$(nproc)
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
@@ -81,12 +86,12 @@ jobs:
     - name: 开始编译固件
       id: compile
       run: |
-        cd $REPO_NAME
+        cd $GITHUB_WORKSPACE/$REPO_NAME
         echo -e "$(nproc) thread compile"
+        # 编译命令：多线程失败则单线程打印详细日志
         make -j$(nproc) || make -j1 || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
-        echo "DATE=$(date +"%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
-        echo "FILE_DATE=$(date +"%Y.%m.%d")" >> $GITHUB_ENV
+        echo "DATE=$(date +"%Y-%m-%d %H:%M")" >> $GITHUB_ENV
 
     - name: 检查磁盘使用情况
       if: (!cancelled())
@@ -97,39 +102,35 @@ jobs:
       if: steps.compile.outputs.status == 'success'
       run: |
         mkdir -p $GITHUB_WORKSPACE/firmware_output
+        # 采用最稳妥的 find 命令递归搜索，避免 cd 通配符报错
+        find $GITHUB_WORKSPACE/$REPO_NAME/bin/targets/ -type f -name "*sysupgrade.bin" -exec cp -f {} $GITHUB_WORKSPACE/firmware_output/ \;
         
-        find $REPO_NAME/bin/targets/ -type f -name "*squashfs-sysupgrade.bin" -exec cp {} $GITHUB_WORKSPACE/firmware_output/ \;
-        
-        # 检查是否成功抓取到文件
         if [ -z "$(ls -A $GITHUB_WORKSPACE/firmware_output)" ]; then
-          echo "Error: 找不到 sysupgrade.bin 固件，请检查编译配置。"
+          echo "Error: 找不到 sysupgrade.bin 固件，请检查 bin/targets 目录。"
           exit 1
         fi
-        
-        echo "FIRMWARE_PATH=$GITHUB_WORKSPACE/firmware_output" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: 发布 Release
       if: steps.organize.outputs.status == 'success'
       uses: ncipollo/release-action@v1
       with:
-        name: R${{ env.DATE }} for ${{ env.REPO_NAME }}
+        name: R${{ env.DATE }} for MT798X
         tag: ${{ env.REPO_BRANCH }}-${{ github.run_number }}
         token: ${{ secrets.GITHUB_TOKEN }}
-        artifacts: ${{ env.FIRMWARE_PATH }}/*
+        artifacts: ${{ github.workspace }}/firmware_output/*
         body: |
-          **构建信息：**
-          - 📅 日期: ${{ env.DATE }}
-          - 🔗 源码: ${{ env.REPO_URL }} / ${{ env.REPO_BRANCH }}
-          - 📂 默认地址: 192.168.100.252
-          - 🔑 默认密码: 无
+          **构建完成！**
+          - 📅 构建时间: ${{ env.DATE }}
+          - 🌿 源码分支: ${{ env.REPO_BRANCH }}
+          - 📂 默认后台: 192.168.100.252 (无密码)
 
     - name: 清理旧版本 (保留最新 3 个)
       if: steps.organize.outputs.status == 'success'
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        RELEASES=$(gh release list --limit 100 --json tagName --jq '.[].tagName')
+        RELEASES=$(gh release list --limit 20 --json tagName --jq '.[].tagName')
         COUNT=0
         for TAG in $RELEASES; do
           COUNT=$((COUNT + 1))
