@@ -1,63 +1,76 @@
-# File name: immortalwrt_24.10_x86.sh
-# Description: OpenWrt DIY script part 2 (After Update feeds)
-#
-# Modify default IP
+#!/bin/bash
+
+# 1. 修改默认 IP
 sed -i 's/192.168.1.1/192.168.100.252/g' package/base-files/files/bin/config_generate
-#
-##### 移除要替换的包
-# 删除老argon
+
+# 2.移除要替换的包
 rm -rf feeds/luci/themes/luci-theme-argon
 rm -rf feeds/luci/applications/luci-app-argon-config
 rm -rf feeds/luci/applications/luci-app-openclash
-rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-libev,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,trojan-plus,tuic-client,v2ray-plugin,xray-plugin,geoview,shadow-tls}
 rm -rf feeds/luci/applications/luci-app-passwall
 rm -rf feeds/packages/lang/golang
+rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-libev,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,trojan-plus,tuic-client,v2ray-plugin,xray-plugin,geoview,shadow-tls}
 #rm -rf feeds/luci/applications/luci-app-netdata
-##### Git稀疏克隆
-# 参数1是分支名, 参数2是仓库地址, 参数3是子目录，同一个仓库下载多个文件夹直接在后面跟文件名或路径，空格分开
+
+# 3. 增强版稀疏克隆函数 (参数1是分支名, 参数2是仓库地址, 参数3是子目录，同一个仓库下载多个文件夹直接在后面跟文件名或路径，空格分开)
 function git_sparse_clone() {
   branch="$1" repourl="$2" && shift 2
-  git clone --depth=1 -b $branch --single-branch --filter=blob:none --sparse $repourl
   repodir=$(echo $repourl | awk -F '/' '{print $(NF)}')
-  cd $repodir && git sparse-checkout set $@
-  mv -f $@ ../package
+  git clone --depth=1 -b $branch --single-branch --filter=blob:none --sparse $repourl
+  cd $repodir
+  git sparse-checkout set $@
+  for sub in $@; do
+    # 修复：如果目标已存在，先删除再移动，防止产生 package/xxx/xxx 嵌套
+    target="../package/$(basename $sub)"
+    [ -d "$target" ] && rm -rf "$target"
+    mv -f "$sub" ../package/
+  done
   cd .. && rm -rf $repodir
 }
-##### 更新 golang 1.25 版本
+
+# 4. 更新 golang 1.25 版本
 git clone --depth=1 -b 25.x https://github.com/sbwml/packages_lang_golang feeds/packages/lang/golang
-##### Themes
-# 拉取argon主题
+
+# 5. 主题与常规插件
+# 添加argon主题
 git clone --depth=1 -b master https://github.com/jerrykuku/luci-theme-argon package/luci-theme-argon
 git clone --depth=1 -b master https://github.com/jerrykuku/luci-app-argon-config package/luci-app-argon-config
-
-##### 添加额外插件
-# 拉取中文版netdata
-#git clone --depth=1 -b master https://github.com/sirpdboy/luci-app-netdata package/luci-app-netdata
 # 添加Lucky
 git clone --depth=1 -b main https://github.com/gdy666/luci-app-lucky package/lucky
 # 添加系统高级设置
 git clone --depth=1 -b main https://github.com/sirpdboy/luci-app-advancedplus package/luci-app-advancedplus
-# 拉取taskplan定时设置插件
-git_sparse_clone main https://github.com/sirpdboy/luci-app-taskplan luci-app-taskplan
-# 设备关机功能
-git_sparse_clone master https://github.com/sirpdboy/luci-app-poweroffdevice luci-app-poweroffdevice
-# 添加adguardhome,bypass，文件管理助手等
-#luci-app-adguardhome luci-app-homeproxy
-#git_sparse_clone main https://github.com/kenzok8/small-package luci-app-bypass luci-app-fileassistant luci-app-filebrowser luci-app-timecontrol luci-app-control-timewol
 # 添加nikki
 git clone --depth=1 -b main https://github.com/nikkinikki-org/OpenWrt-nikki package/OpenWrt-nikki
+# 添加Passwall 及其依赖
+git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/openwrt-passwall-packages
+git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall package/luci-app-passwall
+#git_sparse_clone main https://github.com/Openwrt-Passwall/openwrt-passwall2 package/luci-app-passwall2
+# 添加ssrplus
+#git clone --depth=1 -b master https://github.com/fw876/helloworld package/luci-app-ssr-plus
+# 添加中文版netdata
+#git clone --depth=1 -b master https://github.com/sirpdboy/luci-app-netdata package/luci-app-netdata
+# 添加应用管理
+#git clone --depth=1 -b master https://github.com/destan19/OpenAppFilter package/OpenAppFilter
 # 添加momo
 #git clone --depth=1 -b main https://github.com/nikkinikki-org/OpenWrt-momo package/OpenWrt-momo
+
+# 6. 定制插件克隆 (iStore 特殊处理)
 # 添加openclash
 git_sparse_clone master https://github.com/vernesong/OpenClash luci-app-openclash
+# 添加taskplan定时设置插件
+git_sparse_clone main https://github.com/sirpdboy/luci-app-taskplan luci-app-taskplan
+# 添加设备关机功能
+git_sparse_clone master https://github.com/sirpdboy/luci-app-poweroffdevice luci-app-poweroffdevice
 # 添加istore
 git_sparse_clone main https://github.com/linkease/istore-ui app-store-ui
 git_sparse_clone main https://github.com/linkease/istore luci
-# 添加ssrplus
-#git clone --depth=1 -b master https://github.com/fw876/helloworld package/luci-app-ssr-plus
-git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/openwrt-passwall-packages
-git_sparse_clone main https://github.com/Openwrt-Passwall/openwrt-passwall luci-app-passwall
-#git_sparse_clone main https://github.com/Openwrt-Passwall/openwrt-passwall2 luci-app-passwall2
-# 添加应用管理
-#git clone --depth=1 -b master https://github.com/destan19/OpenAppFilter package/OpenAppFilter
-sed -i 's/ci-llvm=true/ci-llvm=false/g' $OPENWRT_PATH/feeds/packages/lang/rust/Makefile
+# 特别注意：iStore 的目录在仓库里叫 luci，移动到 package 后我们给它改个名防止冲突
+[ -d package/luci ] && mv package/luci package/luci-app-istore
+
+# 7. 修复与优化编译环境
+# 禁用 Rust 的 LLVM 编译，节省 10GB+ 空间和大量时间
+if [ -f feeds/packages/lang/rust/Makefile ]; then
+    sed -i 's/ci-llvm=true/ci-llvm=false/g' feeds/packages/lang/rust/Makefile
+fi
+
+# 9. 其他
