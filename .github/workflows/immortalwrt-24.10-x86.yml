@@ -6,12 +6,11 @@ env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
   REPO_BRANCH: openwrt-24.10
   OPENWRT_NAME: openwrt
-  # 🎯 多个匹配模式用空格隔开
+  # 🎯 匹配特定的镜像文件名
   TARGET_FILE: "*squashfs-combined-efi.img.gz" 
   CONFIG_FILE: configs/immortalwrt_24.10_x86.config
   DIY_P1_SH: scripts/sh/immortalwrt_diy-part1.sh
   DIY_P2_SH: scripts/immortalwrt_24.10_x86.sh
-  FIRMWARE_TAG: immortalwrt-24.10-x86
   TZ: Asia/Shanghai
 
 jobs:
@@ -23,6 +22,13 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@main
+
+    - name: 动态生成固件标签
+      run: |
+        # 从 CONFIG_FILE 路径中提取文件名（不含路径和后缀）
+        TAG_NAME=$(basename "${{ env.CONFIG_FILE }}" .config)
+        echo "FIRMWARE_TAG=$TAG_NAME" >> $GITHUB_ENV
+        echo "✅ 自动生成标签: $TAG_NAME"
 
     - name: 强力空间清理
       uses: jlumbroso/free-disk-space@main
@@ -66,7 +72,7 @@ jobs:
         [ -d $GITHUB_WORKSPACE/files ] && mv $GITHUB_WORKSPACE/files files
         cp $GITHUB_WORKSPACE/$CONFIG_FILE .config
         
-        # 核心：注入 Ccache 配置以确保底层调用
+        # 激活 Ccache 底层编译支持
         echo "CONFIG_CCACHE=y" >> .config
         
         $GITHUB_WORKSPACE/$DIY_P2_SH
@@ -88,18 +94,18 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # 1. 自动提取架构信息
+        # 1. 自动提取精准架构 (x86/64 等)
         TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" $OPENWRT_PATH/.config | cut -d'=' -f2 | tr -d '"')
         TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" $OPENWRT_PATH/.config | cut -d'=' -f2 | tr -d '"')
         AUTO_ARCH="${TARGET_BOARD}/${TARGET_SUBTARGET}"
 
-        # 2. 整理文件 (排除 packages 目录)
+        # 2. 整理文件 (排除 packages 目录并拷贝匹配的固件)
         mkdir -p $GITHUB_WORKSPACE/outputs
         for pattern in ${{ env.TARGET_FILE }}; do
           find $OPENWRT_PATH/bin/targets -path "*/packages" -prune -o -type f -name "$pattern" -exec cp -v {} $GITHUB_WORKSPACE/outputs/ \;
         done
         
-        # 3. 使用 GitHub CLI 发布
+        # 3. 使用 GitHub CLI 发布固件包
         cd $GITHUB_WORKSPACE/outputs
         if [ -n "$(ls -A . 2>/dev/null)" ]; then
           NEW_TAG="${{ env.FIRMWARE_TAG }}-$(date +%Y%m%d%H%M)"
