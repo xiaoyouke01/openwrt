@@ -43,10 +43,10 @@ jobs:
     - name: 4. 环境补丁与源码准备
       run: |
         sudo -E apt-get -qq update
-        # 安装 24.04 编译环境所需的标准依赖
         sudo -E apt-get -qq install $(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu) -y
         sudo timedatectl set-timezone "$TZ"
         
+        # 克隆源码
         git clone -b $REPO_BRANCH --single-branch --filter=blob:none $REPO_URL $OPENWRT_NAME
         cd $OPENWRT_NAME
         echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
@@ -64,18 +64,15 @@ jobs:
         cd $OPENWRT_PATH
         chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH $GITHUB_WORKSPACE/$DIY_P2_SH
         
-        # 运行 Part 1 脚本
         $GITHUB_WORKSPACE/$DIY_P1_SH
         ./scripts/feeds update -a && ./scripts/feeds install -a
         
-        # 移动自定义 files 并应用配置
         [ -d $GITHUB_WORKSPACE/files ] && mv $GITHUB_WORKSPACE/files files
         cp $GITHUB_WORKSPACE/$CONFIG_FILE .config
         
         # 激活 Ccache 编译加速
         echo "CONFIG_CCACHE=y" >> .config
         
-        # 运行 Part 2 脚本
         $GITHUB_WORKSPACE/$DIY_P2_SH
         
         make defconfig
@@ -95,7 +92,6 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # 自动提取精准架构信息
         TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" $OPENWRT_PATH/.config | cut -d'=' -f2 | tr -d '"')
         TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" $OPENWRT_PATH/.config | cut -d'=' -f2 | tr -d '"')
         AUTO_ARCH="${TARGET_BOARD}/${TARGET_SUBTARGET}"
@@ -107,16 +103,17 @@ jobs:
         
         cd $GITHUB_WORKSPACE/outputs
         if [ -n "$(ls -A . 2>/dev/null)" ]; then
-          NEW_TAG="${{ env.FIRMWARE_TAG }}-$(date +%Y%m%d%H%M)"
+          # 包含构建编号的唯一 Tag
+          NEW_TAG="${{ env.FIRMWARE_TAG }}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
           gh release create "$NEW_TAG" ./* \
-            --title "R${{ env.DATE }} - ${{ env.FIRMWARE_TAG }}" \
-            --notes "💻 架构: ${AUTO_ARCH} | 📅 源码: ${{ env.COMMIT_DATE }} | 🌐 IP: 192.168.100.252"
+            --title "R${{ env.DATE }} - ${{ env.FIRMWARE_TAG }} (Build ${{ github.run_number }})" \
+            --notes "💻 架构: ${AUTO_ARCH} | 📅 源码: ${{ env.COMMIT_DATE }} | 🔢 构建编号: ${{ github.run_number }} | 🌐 IP: 192.168.100.252"
         else
-          echo "❌ 错误：在 bin/targets 下未找到 .bin 文件！"
+          echo "❌ 错误：未找到编译产物！"
           exit 1
         fi
 
-        # 自动保留最近 3 个历史版本，防止 Release 列表过长
+        # 自动保留最近 3 个历史版本
         OLD_RELEASES=$(gh release list --limit 100 | grep "${{ env.FIRMWARE_TAG }}-" | cut -f1 | tail -n +4)
         for rel in $OLD_RELEASES; do
           gh release delete "$rel" --yes --cleanup-tag
