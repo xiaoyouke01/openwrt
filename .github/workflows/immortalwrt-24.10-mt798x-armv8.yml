@@ -103,7 +103,7 @@ jobs:
         
         cd $GITHUB_WORKSPACE/outputs
         if [ -n "$(ls -A . 2>/dev/null)" ]; then
-          # 包含构建编号的唯一 Tag
+          # 使用动态标签和时间戳创建 Release
           NEW_TAG="${{ env.FIRMWARE_TAG }}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
           gh release create "$NEW_TAG" ./* \
             --title "R${{ env.DATE }} - ${{ env.FIRMWARE_TAG }} (Build ${{ github.run_number }})" \
