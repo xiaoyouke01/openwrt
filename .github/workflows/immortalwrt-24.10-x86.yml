@@ -45,7 +45,7 @@ jobs:
       run: |
         sudo -E apt-get -qq update
         # 安装编译依赖
-        sudo -E apt-get -qq install $(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu_2204) -y
+        sudo -E apt-get -qq install $(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu) -y
         sudo timedatectl set-timezone "$TZ"
         
         # 克隆源码
@@ -74,14 +74,13 @@ jobs:
         [ -d $GITHUB_WORKSPACE/files ] && mv $GITHUB_WORKSPACE/files files
         cp $GITHUB_WORKSPACE/$CONFIG_FILE .config
         
-        # 核心：注入 Ccache 配置
+        # 激活 Ccache 编译加速
         echo "CONFIG_CCACHE=y" >> .config
         
         # 运行 Part 2 脚本
         $GITHUB_WORKSPACE/$DIY_P2_SH
         
         make defconfig
-        # 极限加速：8 线程并行下载依赖
         make download -j8 || make download -j1 V=s
         find dl -size -1024c -delete
 
