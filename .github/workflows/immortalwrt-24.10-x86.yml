@@ -6,7 +6,7 @@ env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
   REPO_BRANCH: openwrt-24.10
   OPENWRT_NAME: openwrt
-  # 🎯 匹配特定的镜像文件名
+  # 🎯 多个匹配模式用空格隔开
   TARGET_FILE: "*squashfs-combined-efi.img.gz" 
   CONFIG_FILE: configs/immortalwrt_24.10_x86.config
   DIY_P1_SH: scripts/sh/immortalwrt_diy-part1.sh
