@@ -34,14 +34,14 @@ jobs:
           echo "REPO_URL=https://github.com/immortalwrt/immortalwrt" >> $GITHUB_ENV
           echo "REPO_BRANCH=openwrt-24.10" >> $GITHUB_ENV
           echo "CONFIG_FILE=configs/immortalwrt_24.10_x86.config" >> $GITHUB_ENV
-          echo "TARGET_PATTERN=*squashfs-combined-efi.img.gz" >> $GITHUB_ENV
+          echo "TARGET_PATTERN=*squashfs-combined-*.img.gz" >> $GITHUB_ENV
 
         elif [[ "${{ github.event.inputs.target_device }}" == "mt798x" ]]; then
           echo "REPO_URL=https://github.com/padavanonly/immortalwrt-mt798x-6.6" >> $GITHUB_ENV
           echo "REPO_BRANCH=openwrt-24.10-6.6" >> $GITHUB_ENV
           echo "CONFIG_FILE=configs/immortalwrt_24.10_mt798x_armv8.config" >> $GITHUB_ENV
           echo "TARGET_PATTERN=*squashfs-sysupgrade.bin" >> $GITHUB_ENV
-
+          
         #elif [[ "${{ github.event.inputs.target_device }}" == "rpi-4" ]]; then
         #  echo "REPO_URL=https://github.com/immortalwrt/immortalwrt" >> $GITHUB_ENV
         #  echo "REPO_BRANCH=openwrt-24.10" >> $GITHUB_ENV
@@ -49,7 +49,7 @@ jobs:
         #  echo "TARGET_PATTERN=*-factory.img.gz" >> $GITHUB_ENV
         fi
 
-    - name: 3. 空间清理
+    - name: 3. 空间清理 (jlumbroso)
       uses: jlumbroso/free-disk-space@v1.3.1
       with:
         tool-cache: true
@@ -62,14 +62,13 @@ jobs:
 
     - name: 4. 环境部署与 I/O 重定向
       run: |
-        # 建立软链接，将 APT 缓存重定向到 /mnt 分区
+        # 建立软链接，将 APT 缓存重定向到 /mnt 分区（Ubuntu 24.04 编译必备）
         sudo mkdir -p /mnt/apt_cache
         sudo rm -rf /var/cache/apt/archives
         sudo ln -s /mnt/apt_cache /var/cache/apt/archives
         
         export DEBIAN_FRONTEND=noninteractive
         sudo -E apt-get -qq update
-        # 安装编译依赖
         sudo -E apt-get -qq install $(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu) -y
         
         sudo -E apt-get -qq autoremove --purge && sudo -E apt-get -qq clean
@@ -77,7 +76,7 @@ jobs:
         
         # 极速浅克隆源码
         git clone -b $REPO_BRANCH --single-branch --depth 1 $REPO_URL $OPENWRT_NAME
-        echo "OPENWRT_PATH=$PWD/$OPENWRT_NAME" >> $GITHUB_ENV
+        echo "OPENWRT_PATH=${GITHUB_WORKSPACE}/${OPENWRT_NAME}" >> $GITHUB_ENV
         cd $OPENWRT_NAME
         echo "COMMIT_DATE=$(git show -s --date=short --format="%ci")" >> $GITHUB_ENV
 
@@ -88,30 +87,42 @@ jobs:
         mixkey: ${{ env.REPO_BRANCH }}-${{ github.event.inputs.target_device }}
         prefix: ${{ env.OPENWRT_PATH }}        
 
-    - name: 6. 插件集成与性能预热
+    - name: 6. 插件集成与版本感知
       run: |
-        cd $OPENWRT_PATH
-        # 脚本权限与路径安全处理
+        cd ${{ env.OPENWRT_PATH }}
+        # 执行 Part 1 脚本
         [ -f "$GITHUB_WORKSPACE/$DIY_P1_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P1_SH" && "$GITHUB_WORKSPACE/$DIY_P1_SH"
         
         ./scripts/feeds update -a && ./scripts/feeds install -a
         
+        # 配置文件处理
         [ -d "$GITHUB_WORKSPACE/files" ] && mv "$GITHUB_WORKSPACE/files" files
         [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ] && cp "$GITHUB_WORKSPACE/$CONFIG_FILE" .config || (echo "❌ 找不到配置文件 $CONFIG_FILE" && exit 1)
         
-        # 启用 Ccache
+        # 启用 Ccache 并执行 Part 2 脚本
         echo "CONFIG_CCACHE=y" >> .config
-        
         [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH" && "$GITHUB_WORKSPACE/$DIY_P2_SH"
         
+        # 生成最终配置
         make defconfig
+
+        # 🎯 核心逻辑：从编译配置中自动提取真实版本号
+        REAL_VER=$(grep "CONFIG_VERSION_NUMBER=" .config | cut -d'"' -f2)
+        [ -z "$REAL_VER" ] && REAL_VER=$(grep "CONFIG_RELEASE=" .config | cut -d'"' -f2)
+        [ -z "$REAL_VER" ] && REAL_VER="${{ env.REPO_BRANCH }}"
+        
+        echo "OWRT_REAL_VERSION=$REAL_VER" >> $GITHUB_ENV
+        echo "✅ 识别到固件版本: $REAL_VER"
+        
+        # 多线程下载依赖
         make download -j16 || make download -j1 V=s
         find dl -size -1024c -delete
 
-    - name: 7. 极致并发编译
+    - name: 7. 并发编译
       id: compile
       run: |
-        cd $OPENWRT_PATH
+        cd ${{ env.OPENWRT_PATH }}
+        # 使用 全核 + 1 并发编译
         make -j$(($(nproc) + 1)) FORCE_UNSAFE_CONFIGURE=1 || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
         echo "DATE=$(date +"%Y-%m-%d %H:%M")" >> $GITHUB_ENV
@@ -122,28 +133,33 @@ jobs:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         # 解析架构信息
-        TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" $OPENWRT_PATH/.config | cut -d'=' -f2 | tr -d '"')
-        TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" $OPENWRT_PATH/.config | cut -d'=' -f2 | tr -d '"')
+        cd ${{ env.OPENWRT_PATH }}
+        TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" .config | cut -d'=' -f2 | tr -d '"')
+        TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" .config | cut -d'=' -f2 | tr -d '"')
         AUTO_ARCH="${TARGET_BOARD}/${TARGET_SUBTARGET}"
         
         mkdir -p $GITHUB_WORKSPACE/outputs
-        # 精准搜索：只复制符合模式的文件，且排除 packages 软链接
-        find $OPENWRT_PATH/bin/targets -path "*/packages" -prune -o -type f -name "${{ env.TARGET_PATTERN }}" -exec cp -v {} $GITHUB_WORKSPACE/outputs/ \;
+        find ${{ env.OPENWRT_PATH }}/bin/targets -path "*/packages" -prune -o -type f -name "${{ env.TARGET_PATTERN }}" -exec cp -v {} $GITHUB_WORKSPACE/outputs/ \;
         
         cd $GITHUB_WORKSPACE/outputs
         if [ -n "$(ls -A . 2>/dev/null)" ]; then
           DEVICE_NAME="${{ github.event.inputs.target_device }}"
-          NEW_TAG="${DEVICE_NAME}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
+          VERSION="${{ env.OWRT_REAL_VERSION }}"
+          
+          # 💡 关键：Tag 包含版本号前缀，实现版本物理隔离
+          NEW_TAG="${DEVICE_NAME}-v${VERSION}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
+          
           gh release create "$NEW_TAG" ./* \
-            --title "R${{ env.DATE }} - ${DEVICE_NAME} (Build ${{ github.run_number }})" \
-            --notes "💻 架构: ${AUTO_ARCH} | 📅 源码日期: ${{ env.COMMIT_DATE }} | 🔢 构建编号: ${{ github.run_number }} | 🌐 IP: 192.168.100.252"
+            --title "R${{ env.DATE }} - ${DEVICE_NAME} (v${VERSION})" \
+            --notes "🏷️ 版本: ${VERSION} | 💻 架构: ${AUTO_ARCH} | 🌐 IP: 192.168.100.252"
         else
-          echo "❌ 错误：未发现匹配的固件产物！请检查 TARGET_PATTERN 是否正确。"
+          echo "❌ 错误：未发现匹配的固件产物！"
           exit 1
         fi
         
-        # 只清理当前机型的历史版本，保留最近 3 个
-        OLD_RELEASES=$(gh release list --limit 100 | grep "${{ github.event.inputs.target_device }}-" | cut -f1 | tail -n +4)
+        # 💡 精确清理逻辑：仅清理同设备且同版本的旧固件
+        CLEAN_FILTER="${DEVICE_NAME}-v${VERSION}-"
+        OLD_RELEASES=$(gh release list --limit 100 | grep "$CLEAN_FILTER" | cut -f1 | tail -n +4)
         for rel in $OLD_RELEASES; do
           gh release delete "$rel" --yes --cleanup-tag
         done
