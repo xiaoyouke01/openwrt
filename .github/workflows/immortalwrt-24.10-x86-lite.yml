@@ -39,29 +39,10 @@ jobs:
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        echo "🧹 开始深度清理磁盘空间..."
-        # 停止可能占用文件的服务
-        sudo systemctl stop docker mysql php-fpm postgresql || true
-        
-        # 强制删除极其占用空间且无用的预装目录
-        sudo rm -rf \
-          /usr/share/dotnet \
-          /usr/local/lib/android \
-          /opt/ghc \
-          /opt/hostedtoolcache \
-          /usr/local/.ghcup \
-          /usr/share/swift \
-          /usr/local/share/powershell \
-          /usr/local/share/chromium \
-          /usr/local/lib/node_modules \
-          /usr/lib/jvm \
-          /usr/local/share/boost \
-          /etc/mysql \
-          /etc/php \
-          /var/lib/docker \
-          $AGENT_TOOLSDIRECTORY \
-          /etc/apt/sources.list.d/*
-          
+        echo "🧹 正在执行精准清理 (保留核心环境)..."
+        # 仅删除确认无用的巨大文件夹
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache /usr/local/share/powershell /usr/local/share/boost /var/lib/docker
+                  
         # 卸载不必要的系统组件
         sudo -E apt-get -qq purge -y azure-cli docker* ghc* zulu* hhvm* llvm* firefox google* dotnet* aspnetcore* powershell openjdk* adoptopenjdk* mysql* php* mongodb* moby* snap* || true
         sudo -E apt-get -qq autoremove --purge -y
