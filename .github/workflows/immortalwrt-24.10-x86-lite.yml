@@ -1,4 +1,4 @@
-Name: immortalwrt-24.10-x86-lite
+name: immortalwrt-24.10-x86-lite
 on:
   workflow_dispatch:
 
