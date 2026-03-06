@@ -1,4 +1,4 @@
-name: immortalwrt-24.10-x86-lite
+Name: immortalwrt-24.10-x86-lite
 on:
   workflow_dispatch:
 
@@ -13,20 +13,18 @@ env:
   CACHE_TOOLCHAIN: true
   UPLOAD_BIN_DIR: false
   FIRMWARE_RELEASE: true
-  # 【修改】使用英语精简版命名，并作为唯一识别前缀
   FIRMWARE_TAG: immortalwrt-24.10-x86-lite
   TZ: Asia/Shanghai
 
 jobs:
   build:
     runs-on: ubuntu-22.04
-    # 【检查点】必须拥有写入权限
     permissions:
       contents: write
 
     steps:
 
-    - name: Free Disk Space (Ubuntu)
+    - name: 自动释放磁盘空间
       uses: jlumbroso/free-disk-space@main
       with:
         tool-cache: true
@@ -34,28 +32,58 @@ jobs:
         dotnet: true
         haskell: true
         large-packages: true
+        docker-images: true
         swap-storage: true
+
+    - name: 深度清理与安装编译环境
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        echo "🧹 开始深度清理磁盘空间..."
+        # 停止可能占用文件的服务
+        sudo systemctl stop docker mysql php-fpm postgresql || true
+        
+        # 强制删除极其占用空间且无用的预装目录
+        sudo rm -rf \
+          /usr/share/dotnet \
+          /usr/local/lib/android \
+          /opt/ghc \
+          /opt/hostedtoolcache \
+          /usr/local/.ghcup \
+          /usr/share/swift \
+          /usr/local/share/powershell \
+          /usr/local/share/chromium \
+          /usr/local/lib/node_modules \
+          /usr/lib/jvm \
+          /usr/local/share/boost \
+          /etc/mysql \
+          /etc/php \
+          /var/lib/docker \
+          $AGENT_TOOLSDIRECTORY \
+          /etc/apt/sources.list.d/*
+          
+        # 卸载不必要的系统组件
+        sudo -E apt-get -qq purge -y azure-cli docker* ghc* zulu* hhvm* llvm* firefox google* dotnet* aspnetcore* powershell openjdk* adoptopenjdk* mysql* php* mongodb* moby* snap* || true
+        sudo -E apt-get -qq autoremove --purge -y
+        sudo -E apt-get -qq clean -y
+        
+        echo "📊 清理后的磁盘空间:"
+        df -hT
+        
+        echo "📦 开始安装编译依赖..."
+        sudo -E apt-get -qq update -y
+        sudo -E apt-get -qq full-upgrade -y
+        sudo -E apt-get -qq install $(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu_2204) -y
+        sudo -E systemctl daemon-reload
+        
+        # 设置时区与工作目录
+        sudo timedatectl set-timezone "$TZ"
+        sudo mkdir -p /workdir
+        sudo chown $USER:$GROUPS /workdir
 
     - name: Checkout
       uses: actions/checkout@main
 
-    - name: 安装编译环境
-      env:
-        DEBIAN_FRONTEND: noninteractive
-      run: |
-        sudo rm -rf /usr/share/dotnet /etc/apt/sources.list.d/* /usr/local/lib/android /opt/ghc /etc/mysql /etc/php /usr/local/graalvm /usr/local/.ghcup \
-        /usr/local/share/powershell /usr/local/share/chromium /usr/local/lib/node_modules $AGENT_TOOLSDIRECTORY
-        sudo -E apt -qq purge azure-cli docker* ghc* zulu* hhvm* llvm* firefox google* dotnet* aspnetcore* powershell openjdk* adoptopenjdk* mysql* php* mongodb* moby* snap* || true -y
-        sudo -E apt -qq update -y
-        sudo -E apt -qq full-upgrade -y
-        sudo -E apt -qq install $(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu_2204) -y
-        sudo -E systemctl daemon-reload
-        sudo -E apt -qq autoremove --purge -y
-        sudo -E apt -qq clean -y
-        sudo timedatectl set-timezone "$TZ"
-        sudo mkdir -p /workdir
-        sudo chown $USER:$GROUPS /workdir
-        
     - name: 下载固件源码
       working-directory: /workdir
       run: |
@@ -64,7 +92,6 @@ jobs:
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
         cd openwrt
         echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
-        # 提取源码信息用于 Release 描述
         echo "COMMIT_AUTHOR=$(git show -s --date=short --format="作者: %an")" >> $GITHUB_ENV
         echo "COMMIT_DATE=$(git show -s --date=short --format="%ci")" >> $GITHUB_ENV
         echo "COMMIT_MESSAGE=$(git show -s --date=short --format="内容: %s")" >> $GITHUB_ENV
@@ -138,7 +165,6 @@ jobs:
       if: steps.compile.outputs.status == 'success'
       run: |
         cd $OPENWRT_PATH/bin/targets/*/*
-        # 容错性清理
         rm -rf packages *.buildinfo *.manifest *kernel.bin *rootfs.img.gz profiles.json sha256sums
         echo "FIRMWARE_PATH=$PWD" >> $GITHUB_ENV
 
@@ -147,7 +173,6 @@ jobs:
       uses: ncipollo/release-action@v1
       with:
         name: R${{ env.DATE }} for ${{ env.FIRMWARE_TAG }}
-        # 【检查点】带编号的唯一 Tag，allowUpdates 为 false
         tag: ${{ env.FIRMWARE_TAG }}-${{ github.run_number }}
         allowUpdates: false
         token: ${{ secrets.GITHUB_TOKEN }}
@@ -157,7 +182,7 @@ jobs:
           ### 📒 固件信息
           - 💻 平台架构: ${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}
           - 📅 源码日期: ${{ env.COMMIT_DATE }}
-          - ⚙️ 不带Docker
+          - ⚙️ 构建编号: ${{ github.run_number }}
           - 🌐 默认地址: 192.168.100.252
           - 🔑 默认密码: 空
 
@@ -166,7 +191,6 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # 【检查点】健壮的排序与清理逻辑
         RELEASES=$(gh release list --limit 100 --json tagName,createdAt --jq ".[] | select(.tagName | startswith(\"${{ env.FIRMWARE_TAG }}-\"))" | \
                   jq -r -s 'sort_by(.createdAt) | reverse | .[].tagName')
         
