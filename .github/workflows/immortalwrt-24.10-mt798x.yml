@@ -20,12 +20,12 @@ jobs:
 
     steps:
     - name: 1. 检出代码
-      uses: actions/checkout@main
+      uses: actions/checkout@v4
 
-    - name: 2. 强力空间清理 (稳健版)
-      uses: ammaraskar/free-disk-space@main
+    - name: 2. 强力空间清理
+      # 使用稳定版插件释放约 20GB+ 预装软件空间
+      uses: jlumbroso/free-disk-space@v1.3.1
       with:
-        # 该插件不改变分区，仅卸载大型预装包，安全可靠
         tool-cache: true
         android: true
         dotnet: true
@@ -38,18 +38,19 @@ jobs:
       run: |
         TAG_NAME=$(basename "${{ env.CONFIG_FILE }}" .config)
         echo "FIRMWARE_TAG=$TAG_NAME" >> $GITHUB_ENV
-        echo "✅ 生成标签: $TAG_NAME"
 
-    - name: 4. 环境补丁与缓存搬移
+    - name: 4. 环境补丁与缓存搬移 (核心保命步骤)
       run: |
-        # 🔥 将 APT 缓存重定向到大容量的 /mnt 分区，彻底解决 Root 磁盘满的问题
+        # 🔥 将 APT 下载缓存重定向到具有几十GB空间的 /mnt 临时分区
+        # 彻底解决 Ubuntu 24.04 根分区 (/) 空间不足导致的 dpkg 报错
         sudo mkdir -p /mnt/apt_cache
         sudo rm -rf /var/cache/apt/archives
         sudo ln -s /mnt/apt_cache /var/cache/apt/archives
         
+        # 强制非交互模式
         export DEBIAN_FRONTEND=noninteractive
         sudo -E apt-get -qq update
-        # 安装 OpenWrt 编译必备依赖
+        # 安装 24.04 适配的编译依赖
         sudo -E apt-get -qq install $(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu) -y
         
         sudo -E apt-get -qq autoremove --purge
@@ -72,20 +73,16 @@ jobs:
       run: |
         cd $OPENWRT_PATH
         chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH $GITHUB_WORKSPACE/$DIY_P2_SH
-        
         $GITHUB_WORKSPACE/$DIY_P1_SH
         ./scripts/feeds update -a && ./scripts/feeds install -a
         
         [ -d $GITHUB_WORKSPACE/files ] && mv $GITHUB_WORKSPACE/files files
         cp $GITHUB_WORKSPACE/$CONFIG_FILE .config
-        
-        # 激活 Ccache 编译支持
         echo "CONFIG_CCACHE=y" >> .config
         
         $GITHUB_WORKSPACE/$DIY_P2_SH
-        
         make defconfig
-        # 8 线程并行下载，提高稳定性
+        # 8线程高速下载
         make download -j8 || make download -j1 V=s
         find dl -size -1024c -delete
 
@@ -93,7 +90,40 @@ jobs:
       id: compile
       run: |
         cd $OPENWRT_PATH
-        # 使用全核编译，失败时转单核输出详细错误
+        # 使用全部核数编译，若失败则显示详细日志
         make -j$(nproc) || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
-        echo
+        echo "DATE=$(date +"%Y-%m-%d %H:%M")" >> $GITHUB_ENV
+
+    - name: 8. 整理与发布固件
+      if: steps.compile.outputs.status == 'success' && !cancelled()
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # 自动提取精准架构信息
+        TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" $OPENWRT_PATH/.config | cut -d'=' -f2 | tr -d '"')
+        TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" $OPENWRT_PATH/.config | cut -d'=' -f2 | tr -d '"')
+        AUTO_ARCH="${TARGET_BOARD}/${TARGET_SUBTARGET}"
+        
+        mkdir -p $GITHUB_WORKSPACE/outputs
+        for pattern in ${{ env.TARGET_FILE }}; do
+          find $OPENWRT_PATH/bin/targets -path "*/packages" -prune -o -type f -name "$pattern" -exec cp -v {} $GITHUB_WORKSPACE/outputs/ \;
+        done
+        
+        cd $GITHUB_WORKSPACE/outputs
+        if [ -n "$(ls -A . 2>/dev/null)" ]; then
+          # 使用 构建编号+时间戳 确保 Tag 唯一
+          NEW_TAG="${{ env.FIRMWARE_TAG }}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
+          gh release create "$NEW_TAG" ./* \
+            --title "R${{ env.DATE }} - ${{ env.FIRMWARE_TAG }} (Build ${{ github.run_number }})" \
+            --notes "💻 架构: ${AUTO_ARCH} | 📅 源码: ${{ env.COMMIT_DATE }} | 🔢 构建编号: ${{ github.run_number }} | 🌐 IP: 192.168.100.252"
+        else
+          echo "❌ 错误：未发现匹配的固件产物！"
+          exit 1
+        fi
+        
+        # 自动清理，仅保留该 Tag 下最新的 3 个版本
+        OLD_RELEASES=$(gh release list --limit 100 | grep "${{ env.FIRMWARE_TAG }}-" | cut -f1 | tail -n +4)
+        for rel in $OLD_RELEASES; do
+          gh release delete "$rel" --yes --cleanup-tag
+        done
