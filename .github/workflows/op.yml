@@ -1,0 +1,146 @@
+name: ImmortalWrt-Universal-Builder
+on:
+  workflow_dispatch:
+    inputs:
+      target_device:
+        description: '🎯 选择编译目标设备'
+        required: true
+        default: 'mt798x'
+        type: choice
+        options:
+          - 'mt798x'
+          - 'x86_64'
+
+env:
+  OPENWRT_NAME: openwrt
+  DIY_P1_SH: scripts/sh/immortalwrt_diy-part1.sh
+  DIY_P2_SH: scripts/immortalwrt_24.10.sh
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+    - name: 1. 检出代码
+      uses: actions/checkout@v4
+
+    - name: 2. 初始化设备环境变量
+      run: |
+        if [[ "${{ github.event.inputs.target_device }}" == "mt798x" ]]; then
+          echo "REPO_URL=https://github.com/padavanonly/immortalwrt-mt798x-6.6" >> $GITHUB_ENV
+          echo "REPO_BRANCH=openwrt-24.10-6.6" >> $GITHUB_ENV
+          echo "CONFIG_FILE=configs/immortalwrt_24.10_mt798x_armv8.config" >> $GITHUB_ENV
+          # ARM 架构通常只需 sysupgrade.bin
+          echo "TARGET_PATTERN=*squashfs-sysupgrade.bin" >> $GITHUB_ENV
+        else
+          echo "REPO_URL=https://github.com/immortalwrt/immortalwrt" >> $GITHUB_ENV
+          echo "REPO_BRANCH=openwrt-24.10" >> $GITHUB_ENV
+          echo "CONFIG_FILE=configs/immortalwrt_x86_64.config" >> $GITHUB_ENV
+          # x86 架构通常包含 combined 引导镜像
+          echo "TARGET_PATTERN=*squashfs-combined-efi.img.gz" >> $GITHUB_ENV
+        fi
+
+    - name: 3. 强力空间清理
+      uses: jlumbroso/free-disk-space@v1.3.1
+      with:
+        tool-cache: true
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: true
+        docker-images: true
+        swap-storage: true
+
+    - name: 4. 环境部署与 I/O 重定向
+      run: |
+        # 建立软链接，将核心缓存指向空间充足的 /mnt 
+        sudo mkdir -p /mnt/apt_cache
+        sudo rm -rf /var/cache/apt/archives
+        sudo ln -s /mnt/apt_cache /var/cache/apt/archives
+        
+        export DEBIAN_FRONTEND=noninteractive
+        sudo -E apt-get -qq update
+        sudo -E apt-get -qq install $(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu) -y
+        sudo -E apt-get -qq autoremove --purge && sudo -E apt-get -qq clean
+        sudo timedatectl set-timezone "$TZ"
+        
+        # 极速浅克隆
+        git clone -b $REPO_BRANCH --single-branch --depth 1 $REPO_URL $OPENWRT_NAME
+        cd $OPENWRT_NAME
+        echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
+        echo "COMMIT_DATE=$(git show -s --date=short --format="%ci")" >> $GITHUB_ENV
+
+    - name: 5. 缓存管理 (Toolchain & Ccache)
+      uses: HiGarfield/cachewrtbuild@main
+      with:
+        ccache: true
+        # 💡 使用设备名作为 mixkey 的一部分，防止 x86 和 ARM 缓存混用
+        mixkey: ${{ env.REPO_BRANCH }}-${{ github.event.inputs.target_device }}
+        prefix: ${{ env.OPENWRT_PATH }}        
+
+    - name: 6. 插件集成与性能预热
+      run: |
+        cd $OPENWRT_PATH
+        # 赋予脚本执行权限
+        [ -f $GITHUB_WORKSPACE/$DIY_P1_SH ] && chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
+        [ -f $GITHUB_WORKSPACE/$DIY_P2_SH ] && chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
+        
+        # 执行 Part 1 脚本
+        $GITHUB_WORKSPACE/$DIY_P1_SH
+        ./scripts/feeds update -a && ./scripts/feeds install -a
+        
+        # 拷贝配置
+        [ -d $GITHUB_WORKSPACE/files ] && mv $GITHUB_WORKSPACE/files files
+        cp $GITHUB_WORKSPACE/$CONFIG_FILE .config
+        
+        # 开启 Ccache 并应用 Part 2 脚本
+        echo "CONFIG_CCACHE=y" >> .config
+        $GITHUB_WORKSPACE/$DIY_P2_SH
+        
+        make defconfig
+        # 极速并行下载
+        make download -j16 || make download -j1 V=s
+        find dl -size -1024c -delete
+
+    - name: 7. 极致并发编译
+      id: compile
+      run: |
+        cd $OPENWRT_PATH
+        # 使用并发编译，MT798x 和 x86 均适用
+        make -j$(($(nproc) + 1)) FORCE_UNSAFE_CONFIGURE=1 || make -j1 V=s
+        echo "status=success" >> $GITHUB_OUTPUT
+        echo "DATE=$(date +"%Y-%m-%d %H:%M")" >> $GITHUB_ENV
+
+    - name: 8. 整理产物并发布
+      if: steps.compile.outputs.status == 'success' && !cancelled()
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" $OPENWRT_PATH/.config | cut -d'=' -f2 | tr -d '"')
+        TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" $OPENWRT_PATH/.config | cut -d'=' -f2 | tr -d '"')
+        AUTO_ARCH="${TARGET_BOARD}/${TARGET_SUBTARGET}"
+        
+        mkdir -p $GITHUB_WORKSPACE/outputs
+        # 精准匹配固件文件，排除 packages 目录和链接文件
+        find $OPENWRT_PATH/bin/targets -path "*/packages" -prune -o -type f -name "${{ env.TARGET_PATTERN }}" -exec cp -v {} $GITHUB_WORKSPACE/outputs/ \;
+        
+        cd $GITHUB_WORKSPACE/outputs
+        if [ -n "$(ls -A . 2>/dev/null)" ]; then
+          DEVICE_NAME="${{ github.event.inputs.target_device }}"
+          NEW_TAG="${DEVICE_NAME}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
+          gh release create "$NEW_TAG" ./* \
+            --title "R${{ env.DATE }} - ${DEVICE_NAME} (Build ${{ github.run_number }})" \
+            --notes "💻 架构: ${AUTO_ARCH} | 📅 源码日期: ${{ env.COMMIT_DATE }} | 🔢 构建编号: ${{ github.run_number }} | 🌐 默认地址: 192.168.100.252"
+        else
+          echo "❌ 错误：未发现匹配的固件产物！请检查 CONFIG_FILE 或 TARGET_PATTERN。"
+          exit 1
+        fi
+        
+        # 自动保留该设备下的最新 3 个版本
+        OLD_RELEASES=$(gh release list --limit 100 | grep "${{ github.event.inputs.target_device }}-" | cut -f1 | tail -n +4)
+        for rel in $OLD_RELEASES; do
+          gh release delete "$rel" --yes --cleanup-tag
+        done
