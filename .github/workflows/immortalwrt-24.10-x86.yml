@@ -6,7 +6,7 @@ env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
   REPO_BRANCH: openwrt-24.10
   OPENWRT_NAME: openwrt
-  # 🎯 在这里指定多个匹配模式，用空格隔开（支持通配符）
+  # 🎯 多个匹配模式用空格隔开
   TARGET_FILE: "*squashfs-combined-efi.img.gz" 
   CONFIG_FILE: configs/immortalwrt_24.10_x86.config
   DIY_P1_SH: scripts/sh/immortalwrt_diy-part1.sh
@@ -43,16 +43,15 @@ jobs:
         sudo -E apt-get -qq install $(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu_2204) -y
         sudo timedatectl set-timezone "$TZ"
         
-        # 克隆源码
         git clone -b $REPO_BRANCH --single-branch --filter=blob:none $REPO_URL $OPENWRT_NAME
         cd $OPENWRT_NAME
         echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
         echo "COMMIT_DATE=$(git show -s --date=short --format="%ci")" >> $GITHUB_ENV
 
-    - name: 缓存管理
+    - name: 缓存管理 (Toolchain + Ccache)
       uses: HiGarfield/cachewrtbuild@main
       with:
-        ccache: false
+        ccache: true
         mixkey: ${{ env.REPO_BRANCH }}-${{ env.FIRMWARE_TAG }}
         prefix: ${{ env.OPENWRT_PATH }}        
 
@@ -61,16 +60,17 @@ jobs:
         cd $OPENWRT_PATH
         chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH $GITHUB_WORKSPACE/$DIY_P2_SH
         
-        # 执行自定义脚本
         $GITHUB_WORKSPACE/$DIY_P1_SH
         ./scripts/feeds update -a && ./scripts/feeds install -a
         
-        # 整合配置与文件
         [ -d $GITHUB_WORKSPACE/files ] && mv $GITHUB_WORKSPACE/files files
         cp $GITHUB_WORKSPACE/$CONFIG_FILE .config
+        
+        # 核心：注入 Ccache 配置以确保底层调用
+        echo "CONFIG_CCACHE=y" >> .config
+        
         $GITHUB_WORKSPACE/$DIY_P2_SH
         
-        # 预下载依赖
         make defconfig
         make download -j8
         find dl -size -1024c -delete
@@ -88,21 +88,18 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # 1. 自动提取架构信息 (从编译生成的 .config 中识别)
+        # 1. 自动提取架构信息
         TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" $OPENWRT_PATH/.config | cut -d'=' -f2 | tr -d '"')
         TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" $OPENWRT_PATH/.config | cut -d'=' -f2 | tr -d '"')
         AUTO_ARCH="${TARGET_BOARD}/${TARGET_SUBTARGET}"
 
-        # 2. 创建整理目录
+        # 2. 整理文件 (排除 packages 目录)
         mkdir -p $GITHUB_WORKSPACE/outputs
-        
-        # 3. 递归查找文件（自动排除庞大的 packages 目录）
         for pattern in ${{ env.TARGET_FILE }}; do
-          echo "🔍 正在查找: $pattern"
           find $OPENWRT_PATH/bin/targets -path "*/packages" -prune -o -type f -name "$pattern" -exec cp -v {} $GITHUB_WORKSPACE/outputs/ \;
         done
         
-        # 4. 使用 GitHub CLI 创建 Release
+        # 3. 使用 GitHub CLI 发布
         cd $GITHUB_WORKSPACE/outputs
         if [ -n "$(ls -A . 2>/dev/null)" ]; then
           NEW_TAG="${{ env.FIRMWARE_TAG }}-$(date +%Y%m%d%H%M)"
@@ -110,11 +107,11 @@ jobs:
             --title "R${{ env.DATE }} - ${{ env.FIRMWARE_TAG }}" \
             --notes "💻 固件架构: ${AUTO_ARCH} | 📅 源码日期: ${{ env.COMMIT_DATE }} | 🔢 构建编号: ${{ github.run_number }} | 🌐 默认地址: 192.168.100.252"
         else
-          echo "❌ 错误：在 bin/targets 下未找到匹配的文件，请检查 TARGET_FILE 配置！"
+          echo "❌ 错误：在 bin/targets 下未找到匹配文件！"
           exit 1
         fi
 
-        # 5. 自动保留最近 3 个历史版本 (防止 Release 页面堆积)
+        # 4. 自动保留最近 3 个历史版本
         echo "🧹 正在清理旧版本..."
         OLD_RELEASES=$(gh release list --limit 100 | grep "${{ env.FIRMWARE_TAG }}-" | cut -f1 | tail -n +4)
         for rel in $OLD_RELEASES; do
