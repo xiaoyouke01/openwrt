@@ -8,8 +8,8 @@ on:
         default: 'mt798x'
         type: choice
         options:
-          - 'mt798x'
           - 'x86_64'
+          - 'mt798x'
 
 env:
   OPENWRT_NAME: openwrt
