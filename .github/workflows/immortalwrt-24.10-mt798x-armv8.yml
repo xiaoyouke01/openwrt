@@ -8,45 +8,43 @@ env:
   OPENWRT_NAME: openwrt
   # 🎯 多个匹配模式用空格隔开
   TARGET_FILE: "*squashfs-sysupgrade.bin" 
-  CONFIG_FILE: configs/immortalwrt-24.10-mt798x-armv8.config
+  CONFIG_FILE: configs/immortalwrt_24.10_mt798x_armv8.config
   DIY_P1_SH: scripts/sh/immortalwrt_diy-part1.sh
   DIY_P2_SH: scripts/immortalwrt_24.10.sh
   TZ: Asia/Shanghai
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
 
     steps:
-    - name: Checkout
+    - name: 1. 检出代码
       uses: actions/checkout@main
 
-    - name: 动态生成固件标签
+    - name: 2. 空间释放
+      uses: easimon/maximize-build-space@master
+      with:
+        root-reserve-mb: 4096
+        temp-reserve-mb: 512
+        remove-dotnet: 'true'
+        remove-android: 'true'
+        remove-haskell: 'true'
+        remove-codeql: 'true'
+        remove-docker-images: 'true'
+
+    - name: 3. 动态生成固件标签
       run: |
-        # 从 CONFIG_FILE 路径中提取文件名（不含路径和后缀）
         TAG_NAME=$(basename "${{ env.CONFIG_FILE }}" .config)
         echo "FIRMWARE_TAG=$TAG_NAME" >> $GITHUB_ENV
         echo "✅ 自动生成标签: $TAG_NAME"
 
-    - name: 强力空间清理
-      uses: jlumbroso/free-disk-space@main
-      with:
-        tool-cache: true
-        android: true
-        dotnet: true
-        docker-images: true
-        large-packages: false
-        swap-storage: true
-
-    - name: 深度环境部署与源码准备
-      env:
-        DEBIAN_FRONTEND: noninteractive
+    - name: 4. 环境补丁与源码准备
       run: |
-        sudo rm -rf /etc/apt/sources.list.d/*
         sudo -E apt-get -qq update
-        sudo -E apt-get -qq install $(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu_2204) -y
+        # 安装 24.04 编译环境所需的标准依赖
+        sudo -E apt-get -qq install $(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu) -y
         sudo timedatectl set-timezone "$TZ"
         
         git clone -b $REPO_BRANCH --single-branch --filter=blob:none $REPO_URL $OPENWRT_NAME
@@ -54,34 +52,37 @@ jobs:
         echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
         echo "COMMIT_DATE=$(git show -s --date=short --format="%ci")" >> $GITHUB_ENV
 
-    - name: 缓存管理 (Toolchain + Ccache)
+    - name: 5. 缓存管理 (Toolchain + Ccache)
       uses: HiGarfield/cachewrtbuild@main
       with:
         ccache: true
         mixkey: ${{ env.REPO_BRANCH }}-${{ env.FIRMWARE_TAG }}
         prefix: ${{ env.OPENWRT_PATH }}        
 
-    - name: 插件与自定义配置
+    - name: 6. 插件与自定义配置
       run: |
         cd $OPENWRT_PATH
         chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH $GITHUB_WORKSPACE/$DIY_P2_SH
         
+        # 运行 Part 1 脚本
         $GITHUB_WORKSPACE/$DIY_P1_SH
         ./scripts/feeds update -a && ./scripts/feeds install -a
         
+        # 移动自定义 files 并应用配置
         [ -d $GITHUB_WORKSPACE/files ] && mv $GITHUB_WORKSPACE/files files
         cp $GITHUB_WORKSPACE/$CONFIG_FILE .config
         
-        # 激活 Ccache 底层编译支持
+        # 激活 Ccache 编译加速
         echo "CONFIG_CCACHE=y" >> .config
         
+        # 运行 Part 2 脚本
         $GITHUB_WORKSPACE/$DIY_P2_SH
         
         make defconfig
-        make download -j8
+        make download -j8 || make download -j1 V=s
         find dl -size -1024c -delete
 
-    - name: 编译固件
+    - name: 7. 编译固件
       id: compile
       run: |
         cd $OPENWRT_PATH
@@ -89,36 +90,33 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
         echo "DATE=$(date +"%Y-%m-%d %H:%M")" >> $GITHUB_ENV
 
-    - name: 整理与发布固件
+    - name: 8. 整理与发布固件
       if: steps.compile.outputs.status == 'success' && !cancelled()
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # 1. 自动提取精准架构 (x86/64 等)
+        # 自动提取精准架构信息
         TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" $OPENWRT_PATH/.config | cut -d'=' -f2 | tr -d '"')
         TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" $OPENWRT_PATH/.config | cut -d'=' -f2 | tr -d '"')
         AUTO_ARCH="${TARGET_BOARD}/${TARGET_SUBTARGET}"
 
-        # 2. 整理文件 (排除 packages 目录并拷贝匹配的固件)
         mkdir -p $GITHUB_WORKSPACE/outputs
         for pattern in ${{ env.TARGET_FILE }}; do
           find $OPENWRT_PATH/bin/targets -path "*/packages" -prune -o -type f -name "$pattern" -exec cp -v {} $GITHUB_WORKSPACE/outputs/ \;
         done
         
-        # 3. 使用 GitHub CLI 发布固件包
         cd $GITHUB_WORKSPACE/outputs
         if [ -n "$(ls -A . 2>/dev/null)" ]; then
           NEW_TAG="${{ env.FIRMWARE_TAG }}-$(date +%Y%m%d%H%M)"
           gh release create "$NEW_TAG" ./* \
             --title "R${{ env.DATE }} - ${{ env.FIRMWARE_TAG }}" \
-            --notes "💻 固件架构: ${AUTO_ARCH} | 📅 源码日期: ${{ env.COMMIT_DATE }} | 🔢 构建编号: ${{ github.run_number }} | 🌐 默认地址: 192.168.100.252"
+            --notes "💻 架构: ${AUTO_ARCH} | 📅 源码: ${{ env.COMMIT_DATE }} | 🌐 IP: 192.168.100.252"
         else
-          echo "❌ 错误：在 bin/targets 下未找到匹配文件！"
+          echo "❌ 错误：在 bin/targets 下未找到 .bin 文件！"
           exit 1
         fi
 
-        # 4. 自动保留最近 3 个历史版本
-        echo "🧹 正在清理旧版本..."
+        # 自动保留最近 3 个历史版本，防止 Release 列表过长
         OLD_RELEASES=$(gh release list --limit 100 | grep "${{ env.FIRMWARE_TAG }}-" | cut -f1 | tail -n +4)
         for rel in $OLD_RELEASES; do
           gh release delete "$rel" --yes --cleanup-tag
