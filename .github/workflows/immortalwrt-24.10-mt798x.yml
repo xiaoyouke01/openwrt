@@ -1,140 +1,120 @@
 name: immortalwrt-24.10-mt798x-armv8
-
 on:
   workflow_dispatch:
 
 env:
   REPO_URL: https://github.com/padavanonly/immortalwrt-mt798x-6.6
   REPO_BRANCH: openwrt-24.10-6.6
-  REPO_NAME: openwrt
-  FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: configs/immortalwrt_24.10_mt798x.config
+  OPENWRT_NAME: openwrt
+  # 🎯 多个匹配模式用空格隔开
+  TARGET_FILE: "*squashfs-sysupgrade.bin" 
+  CONFIG_FILE: configs/immortalwrt_24.10_mt798x_armv8.config
   DIY_P1_SH: scripts/sh/immortalwrt_diy-part1.sh
-  DIY_P2_SH: scripts/immortalwrt_24.10_mt798x.sh
+  DIY_P2_SH: scripts/immortalwrt_24.10.sh
   TZ: Asia/Shanghai
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+    - name: 1. 检出代码
+      uses: actions/checkout@main
 
-    - name: 环境清理与依赖安装
-      env:
-        DEBIAN_FRONTEND: noninteractive
+    - name: 2. 空间释放
+      uses: easimon/maximize-build-space@master
+      with:
+        root-reserve-mb: 4096
+        temp-reserve-mb: 512
+        remove-dotnet: 'true'
+        remove-android: 'true'
+        remove-haskell: 'true'
+        remove-codeql: 'true'
+        remove-docker-images: 'true'
+
+    - name: 3. 动态生成固件标签
       run: |
-        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/powershell /usr/local/share/chromium /usr/local/lib/node_modules
+        TAG_NAME=$(basename "${{ env.CONFIG_FILE }}" .config)
+        echo "FIRMWARE_TAG=$TAG_NAME" >> $GITHUB_ENV
+        echo "✅ 自动生成标签: $TAG_NAME"
+
+    - name: 4. 环境补丁与源码准备
+      run: |
         sudo -E apt-get -qq update
-        sudo -E apt-get -qq install $(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu_2204) -y
-        sudo -E apt-get -qq autoremove --purge
-        sudo -E apt-get -qq clean
+        sudo -E apt-get -qq install $(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu) -y
         sudo timedatectl set-timezone "$TZ"
+        
+        # 克隆源码
+        git clone -b $REPO_BRANCH --single-branch --filter=blob:none $REPO_URL $OPENWRT_NAME
+        cd $OPENWRT_NAME
+        echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
+        echo "COMMIT_DATE=$(git show -s --date=short --format="%ci")" >> $GITHUB_ENV
 
-    - name: 下载固件源码
-      run: |
-        git clone -b $REPO_BRANCH --depth 1 $REPO_URL $REPO_NAME
-
-    - name: Cache Feeds
-      uses: actions/cache@v4
+    - name: 5. 缓存管理 (Toolchain + Ccache)
+      uses: HiGarfield/cachewrtbuild@main
       with:
-        path: ${{ env.REPO_NAME }}/feeds
-        # 精确匹配 feeds 配置文件，防止超时
-        key: ${{ runner.os }}-feeds-${{ hashFiles(format('{0}/feeds.conf.default', env.REPO_NAME)) }}
-        restore-keys: ${{ runner.os }}-feeds-
+        ccache: true
+        mixkey: ${{ env.REPO_BRANCH }}-${{ env.FIRMWARE_TAG }}
+        prefix: ${{ env.OPENWRT_PATH }}        
 
-    - name: 加载自定义设置 (Part 1)
+    - name: 6. 插件与自定义配置
       run: |
-        # 确保使用绝对路径，避免找不到文件
-        [ -e $GITHUB_WORKSPACE/$FEEDS_CONF ] && cp -f $GITHUB_WORKSPACE/$FEEDS_CONF $GITHUB_WORKSPACE/$REPO_NAME/feeds.conf.default
-        chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
-        # 必须进入源码目录后，再执行外部的自定义脚本
-        cd $GITHUB_WORKSPACE/$REPO_NAME
+        cd $OPENWRT_PATH
+        chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH $GITHUB_WORKSPACE/$DIY_P2_SH
+        
         $GITHUB_WORKSPACE/$DIY_P1_SH
-        ./scripts/feeds update -a
-        ./scripts/feeds install -a
-
-    - name: 更改设置 (Part 2)
-      run: |
-        # 统一使用绝对路径挂载 files 和 config
-        [ -d $GITHUB_WORKSPACE/files ] && cp -rf $GITHUB_WORKSPACE/files $GITHUB_WORKSPACE/$REPO_NAME/files
-        [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp -f $GITHUB_WORKSPACE/$CONFIG_FILE $GITHUB_WORKSPACE/$REPO_NAME/.config
-        chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
-        # 必须进入源码目录执行，确保 sed 等替换命令正确工作
-        cd $GITHUB_WORKSPACE/$REPO_NAME
+        ./scripts/feeds update -a && ./scripts/feeds install -a
+        
+        [ -d $GITHUB_WORKSPACE/files ] && mv $GITHUB_WORKSPACE/files files
+        cp $GITHUB_WORKSPACE/$CONFIG_FILE .config
+        
+        # 激活 Ccache 编译加速
+        echo "CONFIG_CCACHE=y" >> .config
+        
         $GITHUB_WORKSPACE/$DIY_P2_SH
+        
         make defconfig
+        make download -j8 || make download -j1 V=s
+        find dl -size -1024c -delete
 
-    - name: Cache DL
-      uses: actions/cache@v4
-      with:
-        path: ${{ env.REPO_NAME }}/dl
-        # 核心修复点：精确指向源码目录下的 .config，彻底解决 120 秒超时问题
-        key: ${{ runner.os }}-dl-${{ hashFiles(format('{0}/.config', env.REPO_NAME)) }}
-        restore-keys: ${{ runner.os }}-dl-
-
-    - name: 下载固件依赖包 (DL)
-      run: |
-        cd $GITHUB_WORKSPACE/$REPO_NAME
-        make download -j$(nproc)
-        find dl -size -1024c -exec ls -l {} \;
-        find dl -size -1024c -exec rm -f {} \;
-
-    - name: 开始编译固件
+    - name: 7. 编译固件
       id: compile
       run: |
-        cd $GITHUB_WORKSPACE/$REPO_NAME
-        echo -e "$(nproc) thread compile"
-        # 编译命令：多线程失败则单线程打印详细日志
-        make -j$(nproc) || make -j1 || make -j1 V=s
+        cd $OPENWRT_PATH
+        make -j$(nproc) || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
         echo "DATE=$(date +"%Y-%m-%d %H:%M")" >> $GITHUB_ENV
 
-    - name: 检查磁盘使用情况
-      if: (!cancelled())
-      run: df -hT
-
-    - name: 整理编译产物
-      id: organize
-      if: steps.compile.outputs.status == 'success'
-      run: |
-        mkdir -p $GITHUB_WORKSPACE/firmware_output
-        # 采用最稳妥的 find 命令递归搜索，避免 cd 通配符报错
-        find $GITHUB_WORKSPACE/$REPO_NAME/bin/targets/ -type f -name "*sysupgrade.bin" -exec cp -f {} $GITHUB_WORKSPACE/firmware_output/ \;
-        
-        if [ -z "$(ls -A $GITHUB_WORKSPACE/firmware_output)" ]; then
-          echo "Error: 找不到 sysupgrade.bin 固件，请检查 bin/targets 目录。"
-          exit 1
-        fi
-        echo "status=success" >> $GITHUB_OUTPUT
-
-    - name: 发布 Release
-      if: steps.organize.outputs.status == 'success'
-      uses: ncipollo/release-action@v1
-      with:
-        name: R${{ env.DATE }} for MT798X
-        tag: ${{ env.REPO_BRANCH }}-${{ github.run_number }}
-        token: ${{ secrets.GITHUB_TOKEN }}
-        artifacts: ${{ github.workspace }}/firmware_output/*
-        body: |
-          **构建完成！**
-          - 📅 构建时间: ${{ env.DATE }}
-          - 🌿 源码分支: ${{ env.REPO_BRANCH }}
-          - 📂 默认后台: 192.168.100.252 (无密码)
-
-    - name: 清理旧版本 (保留最新 3 个)
-      if: steps.organize.outputs.status == 'success'
+    - name: 8. 整理与发布固件
+      if: steps.compile.outputs.status == 'success' && !cancelled()
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        RELEASES=$(gh release list --limit 20 --json tagName --jq '.[].tagName')
-        COUNT=0
-        for TAG in $RELEASES; do
-          COUNT=$((COUNT + 1))
-          if [ $COUNT -gt 3 ]; then
-            gh release delete "$TAG" --yes --cleanup-tag
-          fi
+        TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" $OPENWRT_PATH/.config | cut -d'=' -f2 | tr -d '"')
+        TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" $OPENWRT_PATH/.config | cut -d'=' -f2 | tr -d '"')
+        AUTO_ARCH="${TARGET_BOARD}/${TARGET_SUBTARGET}"
+
+        mkdir -p $GITHUB_WORKSPACE/outputs
+        for pattern in ${{ env.TARGET_FILE }}; do
+          find $OPENWRT_PATH/bin/targets -path "*/packages" -prune -o -type f -name "$pattern" -exec cp -v {} $GITHUB_WORKSPACE/outputs/ \;
+        done
+        
+        cd $GITHUB_WORKSPACE/outputs
+        if [ -n "$(ls -A . 2>/dev/null)" ]; then
+          # 使用动态标签和时间戳创建 Release
+          NEW_TAG="${{ env.FIRMWARE_TAG }}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
+          gh release create "$NEW_TAG" ./* \
+            --title "R${{ env.DATE }} - ${{ env.FIRMWARE_TAG }} (Build ${{ github.run_number }})" \
+            --notes "💻 架构: ${AUTO_ARCH} | 📅 源码: ${{ env.COMMIT_DATE }} | 🔢 构建编号: ${{ github.run_number }} | 🌐 IP: 192.168.100.252"
+        else
+          echo "❌ 错误：未找到编译产物！"
+          exit 1
+        fi
+
+        # 自动保留最近 3 个历史版本
+        OLD_RELEASES=$(gh release list --limit 100 | grep "${{ env.FIRMWARE_TAG }}-" | cut -f1 | tail -n +4)
+        for rel in $OLD_RELEASES; do
+          gh release delete "$rel" --yes --cleanup-tag
         done
