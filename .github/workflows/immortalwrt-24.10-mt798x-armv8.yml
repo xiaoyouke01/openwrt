@@ -10,7 +10,7 @@ env:
   TARGET_FILE: "*squashfs-sysupgrade.bin" 
   CONFIG_FILE: configs/immortalwrt-24.10-mt798x-armv8.config
   DIY_P1_SH: scripts/sh/immortalwrt_diy-part1.sh
-  DIY_P2_SH: scripts/immortalwrt-24.10-mt798x-armv8.sh
+  DIY_P2_SH: scripts/immortalwrt_24.10.sh
   TZ: Asia/Shanghai
 
 jobs:
