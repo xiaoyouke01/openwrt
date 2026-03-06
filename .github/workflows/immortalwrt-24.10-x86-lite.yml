@@ -99,15 +99,35 @@ jobs:
 
     - name: Generate Variables
       run: |
-        cp $CONFIG_FILE $OPENWRT_PATH/.config
-        cd $OPENWRT_PATH
-        make defconfig > /dev/null 2>&1
+        echo "🔍 开始检查环境变量和配置文件..."
+        
+        # 1. 检查配置文件是否真的存在
+        if [ ! -f "$CONFIG_FILE" ]; then
+          echo "❌ 致命错误: 找不到配置文件 $CONFIG_FILE"
+          echo "请确认你的 GitHub 仓库中是否真的存在这个文件路径！"
+          exit 1
+        fi
+        
+        # 2. 复制配置文件
+        cp "$CONFIG_FILE" "$OPENWRT_PATH/.config"
+        cd "$OPENWRT_PATH"
+        
+        # 3. 运行 make defconfig（去掉隐藏日志的黑洞代码）
+        echo "⚙️ 正在运行 make defconfig..."
+        make defconfig
+        
+        # 4. 提取变量
         SOURCE_REPO="$(echo $REPO_URL | awk -F '/' '{print $(NF)}')"
         echo "SOURCE_REPO=$SOURCE_REPO" >> $GITHUB_ENV
-        DEVICE_TARGET=$(cat .config | grep CONFIG_TARGET_BOARD | awk -F '"' '{print $2}')
+        
+        # 5. 提取硬件架构（增加容错处理，防止因未命中导致脚本崩溃）
+        DEVICE_TARGET=$(grep -m 1 'CONFIG_TARGET_BOARD=' .config | awk -F '"' '{print $2}' || echo "unknown")
         echo "DEVICE_TARGET=$DEVICE_TARGET" >> $GITHUB_ENV
-        DEVICE_SUBTARGET=$(cat .config | grep CONFIG_TARGET_SUBTARGET | awk -F '"' '{print $2}')
+        
+        DEVICE_SUBTARGET=$(grep -m 1 'CONFIG_TARGET_SUBTARGET=' .config | awk -F '"' '{print $2}' || echo "unknown")
         echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_ENV
+        
+        echo "✅ 成功提取平台架构: $DEVICE_TARGET-$DEVICE_SUBTARGET"
 
     - name: Cache Toolchain
       if: env.CACHE_TOOLCHAIN == 'true'
