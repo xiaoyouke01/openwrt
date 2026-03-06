@@ -13,12 +13,14 @@ env:
   CACHE_TOOLCHAIN: true
   UPLOAD_BIN_DIR: false
   FIRMWARE_RELEASE: true
+  # 【修改】使用英语精简版命名，并作为唯一识别前缀
   FIRMWARE_TAG: immortalwrt-24.10-x86-lite
   TZ: Asia/Shanghai
 
 jobs:
   build:
     runs-on: ubuntu-22.04
+    # 【检查点】必须拥有写入权限
     permissions:
       contents: write
 
@@ -41,12 +43,9 @@ jobs:
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        # 清理 Docker 镜像释放约 10GB+ 空间
-        sudo docker image prune -a -f
         sudo rm -rf /usr/share/dotnet /etc/apt/sources.list.d/* /usr/local/lib/android /opt/ghc /etc/mysql /etc/php /usr/local/graalvm /usr/local/.ghcup \
         /usr/local/share/powershell /usr/local/share/chromium /usr/local/lib/node_modules $AGENT_TOOLSDIRECTORY
-        # 修正 purge 逻辑：确保即使找不到包也返回成功 (|| true)
-        sudo -E apt -qq purge -y azure-cli docker* ghc* zulu* hhvm* llvm* firefox google* dotnet* aspnetcore* powershell openjdk* adoptopenjdk* mysql* php* mongodb* moby* snap* || true
+        sudo -E apt -qq purge azure-cli docker* ghc* zulu* hhvm* llvm* firefox google* dotnet* aspnetcore* powershell openjdk* adoptopenjdk* mysql* php* mongodb* moby* snap* || true -y
         sudo -E apt -qq update -y
         sudo -E apt -qq full-upgrade -y
         sudo -E apt -qq install $(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu_2204) -y
@@ -65,6 +64,7 @@ jobs:
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
         cd openwrt
         echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
+        # 提取源码信息用于 Release 描述
         echo "COMMIT_AUTHOR=$(git show -s --date=short --format="作者: %an")" >> $GITHUB_ENV
         echo "COMMIT_DATE=$(git show -s --date=short --format="%ci")" >> $GITHUB_ENV
         echo "COMMIT_MESSAGE=$(git show -s --date=short --format="内容: %s")" >> $GITHUB_ENV
@@ -138,6 +138,7 @@ jobs:
       if: steps.compile.outputs.status == 'success'
       run: |
         cd $OPENWRT_PATH/bin/targets/*/*
+        # 容错性清理
         rm -rf packages *.buildinfo *.manifest *kernel.bin *rootfs.img.gz profiles.json sha256sums
         echo "FIRMWARE_PATH=$PWD" >> $GITHUB_ENV
 
@@ -146,6 +147,7 @@ jobs:
       uses: ncipollo/release-action@v1
       with:
         name: R${{ env.DATE }} for ${{ env.FIRMWARE_TAG }}
+        # 【检查点】带编号的唯一 Tag，allowUpdates 为 false
         tag: ${{ env.FIRMWARE_TAG }}-${{ github.run_number }}
         allowUpdates: false
         token: ${{ secrets.GITHUB_TOKEN }}
@@ -164,6 +166,7 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
+        # 【检查点】健壮的排序与清理逻辑
         RELEASES=$(gh release list --limit 100 --json tagName,createdAt --jq ".[] | select(.tagName | startswith(\"${{ env.FIRMWARE_TAG }}-\"))" | \
                   jq -r -s 'sort_by(.createdAt) | reverse | .[].tagName')
         
