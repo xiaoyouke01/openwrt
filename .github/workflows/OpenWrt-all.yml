@@ -97,14 +97,20 @@ jobs:
       run: |
         cd ${{ env.OPENWRT_PATH }}
         
-        # 清洗版本号，移除 Makefile 的特殊符号
-        V_NUM=$(grep "VERSION_NUMBER:=" include/version.mk | cut -d'=' -f2 | sed 's/\$//g; s/(//g; s/)//g; s/if//g; s/,/ /g' | awk '{print $1}' | tr -d ' "')
-        V_CODE=$(grep "VERSION_CODE:=" include/version.mk | cut -d'=' -f2 | tr -d ' "')
+        V_NUM=$(grep "VERSION_NUMBER:=" include/version.mk | cut -d'=' -f2 | sed 's/[^a-zA-Z0-9.-]//g')
+        V_CODE=$(grep "VERSION_CODE:=" include/version.mk | cut -d'=' -f2 | sed 's/[^a-zA-Z0-9.-]//g')
         
-        REAL_VER="$V_NUM"
-        [ -z "$REAL_VER" ] && REAL_VER="$V_CODE"
-        [ -z "$REAL_VER" ] && REAL_VER="${{ env.REPO_BRANCH }}"
-        echo "OWRT_REAL_VERSION=$REAL_VER" >> $GITHUB_ENV
+        if [ -z "$V_NUM" ] || [[ "$V_NUM" == *"if"* ]]; then
+          FINAL_VER="$V_CODE"
+        else
+          FINAL_VER="$V_NUM"
+        fi
+
+        if [ -z "$FINAL_VER" ]; then
+          FINAL_VER="${{ env.REPO_BRANCH }}"
+        fi
+
+        printf "OWRT_REAL_VERSION=%s\n" "$FINAL_VER" >> $GITHUB_ENV
         
         [ -f "$GITHUB_WORKSPACE/$DIY_P1_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P1_SH" && "$GITHUB_WORKSPACE/$DIY_P1_SH"
         ./scripts/feeds update -a && ./scripts/feeds install -a
@@ -166,7 +172,6 @@ jobs:
           --title "R${{ env.DATE }} - ${DEVICE}" \
           --notes "🏷️ 版本: ${VERSION} | 💻 标识: ${DEVICE} | 🏗️ 架构: ${AUTO_ARCH} | 🌐 IP: 192.168.100.252"
         
-        # 稳健清理旧 Release
         CLEAN_FILTER="${DEVICE}-v"
         OLD_RELEASES=$(gh release list --limit 100 | awk -F '\t' '{print $3}' | grep "^${CLEAN_FILTER}" | tail -n +4 || true)
         for rel in $OLD_RELEASES; do
