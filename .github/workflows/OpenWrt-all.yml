@@ -1,4 +1,4 @@
-Name: OpenWrt-all
+name: OpenWrt-all
 
 on:
   workflow_dispatch:
