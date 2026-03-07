@@ -1,4 +1,4 @@
-name: OpenWrt-all
+Name: OpenWrt-all
 
 on:
   workflow_dispatch:
@@ -96,6 +96,14 @@ jobs:
         CCACHE_BASEDIR: ${{ github.workspace }}
       run: |
         cd ${{ env.OPENWRT_PATH }}
+        
+        V_NUM=$(grep "VERSION_NUMBER:=" include/version.mk | cut -d'=' -f2 | tr -d ' "')
+        V_CODE=$(grep "VERSION_CODE:=" include/version.mk | cut -d'=' -f2 | tr -d ' "')
+        
+        REAL_VER="${V_NUM:-$V_CODE}"
+        REAL_VER="${REAL_VER:-${{ env.REPO_BRANCH }}}"
+        echo "OWRT_REAL_VERSION=$REAL_VER" >> $GITHUB_ENV
+        
         [ -f "$GITHUB_WORKSPACE/$DIY_P1_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P1_SH" && "$GITHUB_WORKSPACE/$DIY_P1_SH"
         
         ./scripts/feeds update -a && ./scripts/feeds install -a
@@ -107,10 +115,6 @@ jobs:
         [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH" && "$GITHUB_WORKSPACE/$DIY_P2_SH"
         
         make defconfig
-        REAL_VER=$(grep "CONFIG_VERSION_NUMBER=" .config | cut -d'"' -f2)
-        [ -z "$REAL_VER" ] && REAL_VER=$(grep "CONFIG_RELEASE=" .config | cut -d'"' -f2)
-        [ -z "$REAL_VER" ] && REAL_VER="${{ env.REPO_BRANCH }}"
-        echo "OWRT_REAL_VERSION=$REAL_VER" >> $GITHUB_ENV
         
         for i in {1..3}; do
           make download -j$(nproc) && break || (echo "⚠️ 下载失败，正在尝试第 $i 次重试..." && sleep 2)
@@ -123,7 +127,7 @@ jobs:
       id: compile
       run: |
         cd ${{ env.OPENWRT_PATH }}
-        make -j$(($(nproc) + 1)) FORCE_UNSAFE_CONFIGURE=1 || make -j1 V=s
+        make -j$(($(nproc) + 1)) FORCE_UNSAFE_CONFIGURE=1 || make -j1 V=s || exit 1
         echo "status=success" >> $GITHUB_OUTPUT
         echo "DATE=$(date +"%Y-%m-%d %H:%M")" >> $GITHUB_ENV
 
@@ -132,10 +136,11 @@ jobs:
       run: |
         cd ${{ env.OPENWRT_PATH }}
         mkdir -p $GITHUB_WORKSPACE/outputs
+        # 还原：排除 packages 文件夹，确保只拷贝 targets 目录下的固件产物
         find bin/targets -path "*/packages" -prune -o -type f -name "${{ env.TARGET_PATTERN }}" -exec cp -v {} $GITHUB_WORKSPACE/outputs/ \;
         
         cd $GITHUB_WORKSPACE/outputs
-        if [ -n "$(ls -A . 2>/dev/null)" ]; then
+        if [ -n "$(ls -A . 2>/dev/null | grep -v 'SHA256SUMS')" ]; then
           sha256sum * > SHA256SUMS
         else
           echo "❌ 未发现固件产物"
@@ -150,7 +155,8 @@ jobs:
         cd ${{ env.OPENWRT_PATH }}
         TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" .config | cut -d'=' -f2 | tr -d '"')
         TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" .config | cut -d'=' -f2 | tr -d '"')
-        AUTO_ARCH="${TARGET_BOARD}/${TARGET_SUBTARGET}"
+        [ -z "$TARGET_BOARD" ] && TARGET_BOARD="unknown"
+        AUTO_ARCH="${TARGET_BOARD}/${TARGET_SUBTARGET:-generic}"
         
         cd $GITHUB_WORKSPACE/outputs
         DEVICE="${{ env.TARGET_ID }}"
@@ -161,11 +167,8 @@ jobs:
           --title "R${{ env.DATE }} - ${DEVICE}" \
           --notes "🏷️ 版本: ${VERSION} | 💻 标识: ${DEVICE} | 🏗️ 架构: ${AUTO_ARCH} | 🌐 IP: 192.168.100.252"
         
-        # 精确清理旧版 Release
         CLEAN_FILTER="${DEVICE}-v"
         OLD_RELEASES=$(gh release list --limit 100 | awk -F '\t' '{print $3}' | grep "^${CLEAN_FILTER}" | tail -n +4)
         for rel in $OLD_RELEASES; do
-          if [ -n "$rel" ]; then
-            gh release delete "$rel" --yes --cleanup-tag
-          fi
+          [ -n "$rel" ] && gh release delete "$rel" --yes --cleanup-tag || true
         done
