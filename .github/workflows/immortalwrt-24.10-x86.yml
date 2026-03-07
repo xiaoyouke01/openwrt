@@ -10,7 +10,7 @@ env:
   TARGET_FILE: "*squashfs-combined-efi.img.gz" 
   CONFIG_FILE: configs/immortalwrt_24.10_x86.config
   DIY_P1_SH: scripts/sh/immortalwrt_diy-part1.sh
-  DIY_P2_SH: scripts/immortalwrt_24.10_x86.sh
+  DIY_P2_SH: scripts/immortalwrt_24.10.sh
   TZ: Asia/Shanghai
 
 jobs:
