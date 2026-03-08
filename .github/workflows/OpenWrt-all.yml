@@ -97,17 +97,16 @@ jobs:
       run: |
         cd ${{ env.OPENWRT_PATH }}
         
-        # 从源码文件提取内部版本号
-        MK_VERSION=$(grep "VERSION_NUMBER:=" include/version.mk | cut -d'=' -f2 | tr -d ' ' || echo "")
-        [ -z "$MK_VERSION" ] && MK_VERSION=$(grep "VERSION_CODE:=" include/version.mk | cut -d'=' -f2 | tr -d ' ' || echo "SNAPSHOT")
+        # 清洗版本号，剔除 Makefile 语法字符
+        MK_VERSION=$(grep "VERSION_NUMBER:=" include/version.mk | cut -d'=' -f2 | sed 's/\$([^)]*)//g; s/[[:space:]]//g' || echo "")
+        [ -z "$MK_VERSION" ] && MK_VERSION=$(grep "VERSION_CODE:=" include/version.mk | cut -d'=' -f2 | sed 's/\$([^)]*)//g; s/[[:space:]]//g' || echo "SNAPSHOT")
+        MK_VERSION=$(echo "$MK_VERSION" | tr -d '()$')
         
-        # 获取 Git 简短哈希 (depth 1 下通常返回 commit id)
         GIT_VER=$(git rev-parse --short HEAD || echo "unknown")
         
-        # 整合版本号
         OWRT_REAL_VER="${MK_VERSION}-${GIT_VER}"
         echo "OWRT_REAL_VERSION=$OWRT_REAL_VER" >> $GITHUB_ENV
-        echo "✅ 捕获源码版本: $OWRT_REAL_VER"
+        echo "✅ 最终确定的安全版本号: $OWRT_REAL_VER"
 
         [ -f "$GITHUB_WORKSPACE/$DIY_P1_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P1_SH" && "$GITHUB_WORKSPACE/$DIY_P1_SH"
         
@@ -125,7 +124,6 @@ jobs:
           make download -j$(nproc) && break || (echo "⚠️ 下载失败，正在尝试第 $i 次重试..." && sleep 2)
         done
         make download -j1 V=s || true
-        
         find dl -size -1024c -delete
 
     - name: 8. 开始编译
@@ -170,7 +168,6 @@ jobs:
           --title "R${{ env.DATE }} - ${DEVICE}" \
           --notes "🏷️ 版本: ${VERSION} | 💻 标识: ${DEVICE} | 🏗️ 架构: ${AUTO_ARCH} | 🌐 IP: 192.168.100.252"
         
-        # 精确清理旧版 Release
         CLEAN_FILTER="${DEVICE}-v"
         OLD_RELEASES=$(gh release list --limit 100 | awk -F '\t' '{print $3}' | grep "^${CLEAN_FILTER}" | tail -n +4)
         for rel in $OLD_RELEASES; do
