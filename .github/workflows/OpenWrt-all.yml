@@ -97,19 +97,26 @@ jobs:
       run: |
         cd ${{ env.OPENWRT_PATH }}
         
-        # 清洗版本号，剔除 Makefile 语法字符
-        MK_VERSION=$(grep "VERSION_NUMBER:=" include/version.mk | cut -d'=' -f2 | sed 's/\$([^)]*)//g; s/[[:space:]]//g' || echo "")
-        [ -z "$MK_VERSION" ] && MK_VERSION=$(grep "VERSION_CODE:=" include/version.mk | cut -d'=' -f2 | sed 's/\$([^)]*)//g; s/[[:space:]]//g' || echo "SNAPSHOT")
-        MK_VERSION=$(echo "$MK_VERSION" | tr -d '()$')
+        # 1. 尝试从 version.mk 提取纯数字版本 (如 24.10)
+        # 逻辑：找 VERSION_NUMBER 行，提取第一个匹配的数字+点号组合
+        MK_VERSION=$(grep "VERSION_NUMBER:=" include/version.mk | grep -oE "[0-9]+\.[0-9]+(\.[0-9]+)?" | head -n1)
         
+        # 2. 如果没有提取到，回退到代码名或分支名
+        if [ -z "$MK_VERSION" ]; then
+          MK_VERSION=$(grep "VERSION_CODE:=" include/version.mk | cut -d'=' -f2 | tr -d ' ' | tr -cd '[:alnum:]._-' | sed 's/$(.*)//g')
+        fi
+        [ -z "$MK_VERSION" ] && MK_VERSION="SNAPSHOT"
+        
+        # 3. 获取 Git 哈希
         GIT_VER=$(git rev-parse --short HEAD || echo "unknown")
         
-        OWRT_REAL_VER="${MK_VERSION}-${GIT_VER}"
+        # 4. 最终组合并清洗 (确保没有任何非法字符进入环境变量)
+        OWRT_REAL_VER=$(echo "${MK_VERSION}-${GIT_VER}" | tr -cd '[:alnum:]._-')
+        
         echo "OWRT_REAL_VERSION=$OWRT_REAL_VER" >> $GITHUB_ENV
         echo "✅ 最终确定的安全版本号: $OWRT_REAL_VER"
 
         [ -f "$GITHUB_WORKSPACE/$DIY_P1_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P1_SH" && "$GITHUB_WORKSPACE/$DIY_P1_SH"
-        
         ./scripts/feeds update -a && ./scripts/feeds install -a
         
         [ -d "$GITHUB_WORKSPACE/files" ] && mv "$GITHUB_WORKSPACE/files" files
