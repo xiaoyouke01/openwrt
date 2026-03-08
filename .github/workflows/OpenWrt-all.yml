@@ -38,14 +38,14 @@ jobs:
           echo "REPO_BRANCH=openwrt-24.10" >> $GITHUB_ENV
           echo "CONFIG_FILE=configs/immortalwrt_24.10_x86.config" >> $GITHUB_ENV
           echo "TARGET_PATTERN=*squashfs-combined-*.img.gz" >> $GITHUB_ENV
-          echo "DIY_P2_SH=scripts/immortalwrt_x86_24.10.sh" >> $GITHUB_ENV
+          echo "DIY_P2_SH=scripts/immortalwrt_24.10_x86.sh" >> $GITHUB_ENV
 
         elif [[ "$ID" == "x86_64-25.12" ]]; then
           echo "REPO_URL=https://github.com/immortalwrt/immortalwrt" >> $GITHUB_ENV
           echo "REPO_BRANCH=openwrt-25.12" >> $GITHUB_ENV
           echo "CONFIG_FILE=configs/immortalwrt_25.12_x86.config" >> $GITHUB_ENV
           echo "TARGET_PATTERN=*squashfs-combined-*.img.gz" >> $GITHUB_ENV
-          echo "DIY_P2_SH=scripts/immortalwrt_x86_25.12.sh" >> $GITHUB_ENV
+          echo "DIY_P2_SH=scripts/immortalwrt_25.12_x86.sh" >> $GITHUB_ENV
 
         elif [[ "$ID" == "mt798x-24.10" ]]; then
           echo "REPO_URL=https://github.com/padavanonly/immortalwrt-mt798x-6.6" >> $GITHUB_ENV
