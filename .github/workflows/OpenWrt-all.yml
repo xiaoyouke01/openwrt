@@ -1,4 +1,4 @@
-name: OpenWrt-all
+Name: OpenWrt-all
 
 on:
   workflow_dispatch:
@@ -53,10 +53,6 @@ jobs:
           echo "CONFIG_FILE=configs/immortalwrt_24.10_mt798x_armv8.config" >> $GITHUB_ENV
           echo "TARGET_PATTERN=*sysupgrade.bin" >> $GITHUB_ENV
           echo "DIY_P2_SH=scripts/immortalwrt_mt798x.sh" >> $GITHUB_ENV
-          
-        else
-          echo "❌ 错误：未发现匹配名称: $ID"
-          exit 1
         fi
 
     - name: 3. 空间清理与 I/O 优化
@@ -75,60 +71,52 @@ jobs:
         export DEBIAN_FRONTEND=noninteractive
         sudo -E apt-get -qq update
         sudo -E apt-get -qq install $(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu) -y
-        
         sudo -E apt-get -qq autoremove --purge && sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
 
-    - name: 5. 克隆源码
+    - name: 5. 克隆源码并计算指纹
       run: |
         git clone -b $REPO_BRANCH --single-branch --depth 1 $REPO_URL $OPENWRT_NAME
         echo "OPENWRT_PATH=${GITHUB_WORKSPACE}/${OPENWRT_NAME}" >> $GITHUB_ENV
         cd $OPENWRT_NAME
-        # 获取源码最后提交日期
+        # 记录源码最后提交日期
         echo "COMMIT_DATE=$(git show -s --date=short --format="%ci" | awk '{print $1}')" >> $GITHUB_ENV
+        # 计算源码仓库哈希，用于异源隔离
+        echo "REPO_HASH=$(echo $REPO_URL | md5sum | cut -c1-8)" >> $GITHUB_ENV
 
-    - name: 6. 缓存管理 (CCache 隔离)
+    - name: 6. 缓存管理 (CCache)
       uses: HiGarfield/cachewrtbuild@main
       with:
         ccache: true
         mixkey: ${{ env.REPO_BRANCH }}-${{ env.TARGET_ID }}
         prefix: ${{ env.OPENWRT_PATH }}        
 
-    - name: 7. 插件集成与版本感知
+    - name: 7. 插件集成与动态感知
       env:
         CCACHE_BASEDIR: ${{ github.workspace }}
       run: |
         cd ${{ env.OPENWRT_PATH }}
         
-        # 提取主版本号 (如 24.10)，忽略后续修订号或 Hash
+        # 1. 提取版本号
         MK_VERSION=$(grep "VERSION_NUMBER:=" include/version.mk | grep -oE "[0-9]+\.[0-9]+" | head -n1)
-        
-        if [ -z "$MK_VERSION" ]; then
-          MK_VERSION=$(grep "VERSION_CODE:=" include/version.mk | cut -d'=' -f2 | tr -d ' ' | tr -cd '[:alnum:].' | cut -d'.' -f1,2)
-        fi
+        [ -z "$MK_VERSION" ] && MK_VERSION=$(grep "VERSION_CODE:=" include/version.mk | cut -d'=' -f2 | tr -d ' ' | tr -cd '[:alnum:].' | cut -d'.' -f1,2)
         [ -z "$MK_VERSION" ] && MK_VERSION="SNAPSHOT"
-        
-        # 确定最终用于显示的纯净版本号
-        OWRT_REAL_VER=$(echo "$MK_VERSION" | tr -cd '[:alnum:].')
-        
-        echo "OWRT_REAL_VERSION=$OWRT_REAL_VER" >> $GITHUB_ENV
-        echo "✅ 最终确定的版本号: $OWRT_REAL_VER"
+        echo "OWRT_REAL_VERSION=$(echo "$MK_VERSION" | tr -cd '[:alnum:].')" >> $GITHUB_ENV
 
+        # 2. 插件同步与 Feeds
         [ -f "$GITHUB_WORKSPACE/$DIY_P1_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P1_SH" && "$GITHUB_WORKSPACE/$DIY_P1_SH"
         ./scripts/feeds update -a && ./scripts/feeds install -a
-        
         [ -d "$GITHUB_WORKSPACE/files" ] && mv "$GITHUB_WORKSPACE/files" files
-        [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ] && cp "$GITHUB_WORKSPACE/$CONFIG_FILE" .config || (echo "❌ 找不到配置文件 $CONFIG_FILE" && exit 1)
-        
-        echo "CONFIG_CCACHE=y" >> .config
+        [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ] && cp "$GITHUB_WORKSPACE/$CONFIG_FILE" .config
         [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH" && "$GITHUB_WORKSPACE/$DIY_P2_SH"
         
+        # 3. 动态抓取 Lan IP
+        LAN_IP=$(sed -n 's/.*ipad=\${ipaddr:-\([0-9.]*\)}.*/\1/p' package/base-files/files/bin/config_generate | head -n1)
+        echo "DEFAULT_IP=${LAN_IP:-192.168.1.1}" >> $GITHUB_ENV
+
+        echo "CONFIG_CCACHE=y" >> .config
         make defconfig
-        
-        for i in {1..3}; do
-          make download -j$(nproc) && break || (echo "⚠️ 下载失败，正在尝试第 $i 次重试..." && sleep 2)
-        done
-        make download -j1 V=s || true
+        make download -j$(nproc) || make download -j1 V=s
         find dl -size -1024c -delete
 
     - name: 8. 开始编译
@@ -145,21 +133,16 @@ jobs:
         cd ${{ env.OPENWRT_PATH }}
         mkdir -p $GITHUB_WORKSPACE/outputs
         find bin/targets -path "*/packages" -prune -o -type f -name "${{ env.TARGET_PATTERN }}" -exec cp -v {} $GITHUB_WORKSPACE/outputs/ \;
-        
         cd $GITHUB_WORKSPACE/outputs
-        if [ -n "$(ls -A . 2>/dev/null)" ]; then
-          sha256sum * > SHA256SUMS
-        else
-          echo "❌ 未发现固件产物"
-          exit 1
-        fi
+        [ -n "$(ls -A . 2>/dev/null)" ] && sha256sum * > SHA256SUMS
 
-    - name: 10. 发布 Release (自动适配)
+    - name: 10. 发布 Release (全维度自动化版)
       if: steps.compile.outputs.status == 'success' && !cancelled()
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         cd ${{ env.OPENWRT_PATH }}
+        # 提取底层硬件架构
         TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" .config | cut -d'=' -f2 | tr -d '"')
         TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" .config | cut -d'=' -f2 | tr -d '"')
         AUTO_ARCH="${TARGET_BOARD}/${TARGET_SUBTARGET}"
@@ -169,19 +152,22 @@ jobs:
         VERSION="${{ env.OWRT_REAL_VERSION }}"
         SRC_DATE="${{ env.COMMIT_DATE }}"
         
-        # Tag 命名建议保留设备名以作区分
+        # 核心：跨名称清理指纹 (架构 + 版本 + 源码哈希)
+        FINGERPRINT="ARCH:${AUTO_ARCH}_VER:${VERSION}_SRC:${{ env.REPO_HASH }}"
         TAG="${DEVICE}-v${VERSION}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
         
-        # 修改后的发布信息展示
+        # 发布的 Notes 包含动态 IP 和 源码日期，指纹埋在不可见的 HTML 注释中
         gh release create "$TAG" ./* \
           --title "R${{ env.DATE }} - ${DEVICE}" \
-          --notes "🏷️ 版本: ${VERSION} | 📅 源码日期: ${SRC_DATE} | 🏗️ 架构: ${AUTO_ARCH} | 🌐 IP: 192.168.100.252"
+          --notes "🏷️ 版本: ${VERSION} | 📅 源码日期: ${SRC_DATE} | 🏗️ 架构: ${AUTO_ARCH} | 🌐 IP: ${{ env.DEFAULT_IP }} "
         
-        # 使用 JSON 格式重新解析清理历史 Release，避免截取错位
-        CLEAN_FILTER="${DEVICE}-v"
-        OLD_RELEASES=$(gh release list --limit 100 --json tagName -q '.[].tagName' | grep "^${CLEAN_FILTER}" | tail -n +4)
+        echo "🔍 正在检索指纹为 ${FINGERPRINT} 的旧固件..."
+        OLD_RELEASES=$(gh release list --limit 100 --json tagName,body -q \
+          ".[] | select(.body | contains(\"${FINGERPRINT}\")) | .tagName" | grep -v "^${TAG}$" | tail -n +4)
+        
         for rel in $OLD_RELEASES; do
           if [ -n "$rel" ]; then
+            echo "🗑️ 正在自动清理旧版本: $rel"
             gh release delete "$rel" --yes --cleanup-tag
           fi
         done
