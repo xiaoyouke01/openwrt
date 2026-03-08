@@ -16,7 +16,6 @@ on:
 env:
   OPENWRT_NAME: openwrt
   DIY_P1_SH: scripts/sh/immortalwrt_diy-part1.sh
-  DIY_P2_SH: scripts/immortalwrt_24.10.sh
   TZ: Asia/Shanghai
 
 jobs:
@@ -39,18 +38,21 @@ jobs:
           echo "REPO_BRANCH=openwrt-24.10" >> $GITHUB_ENV
           echo "CONFIG_FILE=configs/immortalwrt_24.10_x86.config" >> $GITHUB_ENV
           echo "TARGET_PATTERN=*squashfs-combined-*.img.gz" >> $GITHUB_ENV
+          echo "DIY_P2_SH=scripts/immortalwrt_24.10.sh" >> $GITHUB_ENV
 
         elif [[ "$ID" == "x86_64-25.12" ]]; then
           echo "REPO_URL=https://github.com/immortalwrt/immortalwrt" >> $GITHUB_ENV
           echo "REPO_BRANCH=openwrt-25.12" >> $GITHUB_ENV
           echo "CONFIG_FILE=configs/immortalwrt_25.12_x86.config" >> $GITHUB_ENV
           echo "TARGET_PATTERN=*squashfs-combined-*.img.gz" >> $GITHUB_ENV
+          echo "DIY_P2_SH=scripts/immortalwrt_25.12.sh" >> $GITHUB_ENV
 
         elif [[ "$ID" == "mt798x" ]]; then
           echo "REPO_URL=https://github.com/padavanonly/immortalwrt-mt798x-6.6" >> $GITHUB_ENV
           echo "REPO_BRANCH=openwrt-24.10-6.6" >> $GITHUB_ENV
           echo "CONFIG_FILE=configs/immortalwrt_24.10_mt798x_armv8.config" >> $GITHUB_ENV
           echo "TARGET_PATTERN=*sysupgrade.bin" >> $GITHUB_ENV
+          echo "DIY_P2_SH=scripts/immortalwrt_mt798x.sh" >> $GITHUB_ENV
           
         else
           echo "❌ 错误：未发现匹配名称: $ID"
@@ -175,8 +177,9 @@ jobs:
           --title "R${{ env.DATE }} - ${DEVICE}" \
           --notes "🏷️ 版本: ${VERSION} | 📅 源码日期: ${SRC_DATE} | 🏗️ 架构: ${AUTO_ARCH} | 🌐 IP: 192.168.100.252"
         
+        # 使用 JSON 格式重新解析清理历史 Release，避免截取错位
         CLEAN_FILTER="${DEVICE}-v"
-        OLD_RELEASES=$(gh release list --limit 100 | awk -F '\t' '{print $3}' | grep "^${CLEAN_FILTER}" | tail -n +4)
+        OLD_RELEASES=$(gh release list --limit 100 --json tagName -q '.[].tagName' | grep "^${CLEAN_FILTER}" | tail -n +4)
         for rel in $OLD_RELEASES; do
           if [ -n "$rel" ]; then
             gh release delete "$rel" --yes --cleanup-tag
