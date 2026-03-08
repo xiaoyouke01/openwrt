@@ -20,7 +20,6 @@ function git_sparse_clone() {
   cd $repodir
   git sparse-checkout set $@
   for sub in $@; do
-    # 修复：如果目标已存在，先删除再移动，防止产生 package/xxx/xxx 嵌套
     target="../package/$(basename $sub)"
     [ -d "$target" ] && rm -rf "$target"
     mv -f "$sub" ../package/
