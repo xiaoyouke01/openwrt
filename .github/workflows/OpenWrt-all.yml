@@ -1,4 +1,4 @@
-name: OpenWrt-all
+name: new
 
 on:
   workflow_dispatch:
@@ -60,11 +60,8 @@ jobs:
       with:
         tool-cache: true
         android: true
-        dotnet: true
-        haskell: true
         large-packages: true
         docker-images: true
-        swap-storage: true
 
     - name: 4. 环境部署
       run: |
@@ -79,9 +76,7 @@ jobs:
         git clone -b $REPO_BRANCH --single-branch --depth 1 $REPO_URL $OPENWRT_NAME
         echo "OPENWRT_PATH=${GITHUB_WORKSPACE}/${OPENWRT_NAME}" >> $GITHUB_ENV
         cd $OPENWRT_NAME
-        # 记录源码最后提交日期
         echo "COMMIT_DATE=$(git show -s --date=short --format="%ci" | awk '{print $1}')" >> $GITHUB_ENV
-        # 计算源码仓库哈希，用于异源隔离
         echo "REPO_HASH=$(echo $REPO_URL | md5sum | cut -c1-8)" >> $GITHUB_ENV
 
     - name: 6. 缓存管理 (CCache)
@@ -97,22 +92,34 @@ jobs:
       run: |
         cd ${{ env.OPENWRT_PATH }}
         
-        # 1. 提取版本号
-        MK_VERSION=$(grep "VERSION_NUMBER:=" include/version.mk | grep -oE "[0-9]+\.[0-9]+" | head -n1)
-        [ -z "$MK_VERSION" ] && MK_VERSION=$(grep "VERSION_CODE:=" include/version.mk | cut -d'=' -f2 | tr -d ' ' | tr -cd '[:alnum:].' | cut -d'.' -f1,2)
-        [ -z "$MK_VERSION" ] && MK_VERSION="SNAPSHOT"
-        echo "OWRT_REAL_VERSION=$(echo "$MK_VERSION" | tr -cd '[:alnum:].')" >> $GITHUB_ENV
+        # 提取版本号
+        FULL_VER=$(grep "VERSION_NUMBER:=" include/version.mk | grep -oE "[0-9][0-9.]*[0-9]" | head -n1)
+        [ -z "$FULL_VER" ] && FULL_VER=$(grep "VERSION_CODE:=" include/version.mk | cut -d'=' -f2 | tr -cd '0-9.' | head -c 10)
+        FULL_VER="${FULL_VER:-SNAPSHOT}"
+        SHORT_VER=$(echo "$FULL_VER" | cut -d'.' -f1,2)
+        
+        echo "OWRT_REAL_VERSION=$FULL_VER" >> $GITHUB_ENV
+        echo "OWRT_VER_SHORT=$SHORT_VER" >> $GITHUB_ENV
 
-        # 2. 插件同步与 Feeds
+        # 执行 DIY 脚本与 feeds 更新
         [ -f "$GITHUB_WORKSPACE/$DIY_P1_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P1_SH" && "$GITHUB_WORKSPACE/$DIY_P1_SH"
         ./scripts/feeds update -a && ./scripts/feeds install -a
         [ -d "$GITHUB_WORKSPACE/files" ] && mv "$GITHUB_WORKSPACE/files" files
         [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ] && cp "$GITHUB_WORKSPACE/$CONFIG_FILE" .config
+        
+        # 🛠️ 关键：先运行 DIY_P2 改 IP，再提取 IP
         [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH" && "$GITHUB_WORKSPACE/$DIY_P2_SH"
         
-        # 3. 动态抓取 Lan IP
-        LAN_IP=$(sed -n 's/.*ipad=\${ipaddr:-\([0-9.]*\)}.*/\1/p' package/base-files/files/bin/config_generate | head -n1)
-        echo "DEFAULT_IP=${LAN_IP:-192.168.1.1}" >> $GITHUB_ENV
+        # 🚀 增强版 IP 提取逻辑：匹配常用的私有 IP 段格式
+        EXTRACTED_IP=$(grep -oE "((192\.168|10\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01]))\.[0-9]+\.[0-9]+)" package/base-files/files/bin/config_generate | head -n1)
+        FINAL_IP="${EXTRACTED_IP:-192.168.1.1}"
+        echo "DEFAULT_IP=$FINAL_IP" >> $GITHUB_ENV
+
+        echo "=========================================="
+        echo "✅ 识别到源码版本: $FULL_VER"
+        echo "✅ 清理参考指纹: $SHORT_VER"
+        echo "✅ 最终后台地址: $FINAL_IP"
+        echo "=========================================="
 
         echo "CONFIG_CCACHE=y" >> .config
         make defconfig
@@ -127,22 +134,21 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
         echo "DATE=$(date +"%Y-%m-%d %H:%M")" >> $GITHUB_ENV
 
-    - name: 9. 整理产物与生成校验
+    - name: 9. 整理产物
       if: steps.compile.outputs.status == 'success'
       run: |
         cd ${{ env.OPENWRT_PATH }}
         mkdir -p $GITHUB_WORKSPACE/outputs
-        find bin/targets -path "*/packages" -prune -o -type f -name "${{ env.TARGET_PATTERN }}" -exec cp -v {} $GITHUB_WORKSPACE/outputs/ \;
+        find bin/targets -type f -name "${{ env.TARGET_PATTERN }}" ! -name "*.json" ! -name "*.manifest" -exec cp -v {} $GITHUB_WORKSPACE/outputs/ \;
         cd $GITHUB_WORKSPACE/outputs
         [ -n "$(ls -A . 2>/dev/null)" ] && sha256sum * > SHA256SUMS
 
-    - name: 10. 发布 Release (全维度自动化版)
+    - name: 10. 发布 Release (指纹全量固化)
       if: steps.compile.outputs.status == 'success' && !cancelled()
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         cd ${{ env.OPENWRT_PATH }}
-        # 提取底层硬件架构
         TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" .config | cut -d'=' -f2 | tr -d '"')
         TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" .config | cut -d'=' -f2 | tr -d '"')
         AUTO_ARCH="${TARGET_BOARD}/${TARGET_SUBTARGET}"
@@ -150,24 +156,29 @@ jobs:
         cd $GITHUB_WORKSPACE/outputs
         DEVICE="${{ env.TARGET_ID }}"
         VERSION="${{ env.OWRT_REAL_VERSION }}"
-        SRC_DATE="${{ env.COMMIT_DATE }}"
+        VER_SHORT="${{ env.OWRT_VER_SHORT }}"
         
-        # 核心：跨名称清理指纹 (架构 + 版本 + 源码哈希)
-        FINGERPRINT="ARCH:${AUTO_ARCH}_VER:${VERSION}_SRC:${{ env.REPO_HASH }}"
+        # 🔑 唯一指纹标识
+        FINGERPRINT="ARCH:${AUTO_ARCH}_VER:${VER_SHORT}_SRC:${{ env.REPO_HASH }}"
         TAG="${DEVICE}-v${VERSION}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
         
-        # 发布的 Notes 包含动态 IP 和 源码日期，指纹埋在不可见的 HTML 注释中
+        # 🛡️ 变量化拼接法：防止粘贴时丢失 HTML 标签
+        LB="<"
+        RB=">"
+        BASE_INFO="🏷️ 版本: ${VERSION} | 📅 源码日期: ${{ env.COMMIT_DATE }} | 🏗️ 架构: ${AUTO_ARCH} | 🌐 IP: ${{ env.DEFAULT_IP }}"
+        TOTAL_BODY="${BASE_INFO} ${LB}!-- ${FINGERPRINT} --${RB}"
+        
         gh release create "$TAG" ./* \
           --title "R${{ env.DATE }} - ${DEVICE}" \
-          --notes "🏷️ 版本: ${VERSION} | 📅 源码日期: ${SRC_DATE} | 🏗️ 架构: ${AUTO_ARCH} | 🌐 IP: ${{ env.DEFAULT_IP }} "
+          --notes "$TOTAL_BODY"
         
-        echo "🔍 正在检索指纹为 ${FINGERPRINT} 的旧固件..."
+        echo "🔍 清理指纹: ${FINGERPRINT}"
         OLD_RELEASES=$(gh release list --limit 100 --json tagName,body -q \
           ".[] | select(.body | contains(\"${FINGERPRINT}\")) | .tagName" | grep -v "^${TAG}$" | tail -n +4)
         
         for rel in $OLD_RELEASES; do
           if [ -n "$rel" ]; then
-            echo "🗑️ 正在自动清理旧版本: $rel"
+            echo "🗑️ 清理旧版: $rel"
             gh release delete "$rel" --yes --cleanup-tag
           fi
         done
