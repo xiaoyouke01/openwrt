@@ -82,7 +82,8 @@ jobs:
         git clone -b $REPO_BRANCH --single-branch --depth 1 $REPO_URL $OPENWRT_NAME
         echo "OPENWRT_PATH=${GITHUB_WORKSPACE}/${OPENWRT_NAME}" >> $GITHUB_ENV
         cd $OPENWRT_NAME
-        echo "COMMIT_DATE=$(git show -s --date=short --format="%ci")" >> $GITHUB_ENV
+        # 获取源码最后提交日期
+        echo "COMMIT_DATE=$(git show -s --date=short --format="%ci" | awk '{print $1}')" >> $GITHUB_ENV
 
     - name: 6. 缓存管理 (CCache 隔离)
       uses: HiGarfield/cachewrtbuild@main
@@ -97,19 +98,19 @@ jobs:
       run: |
         cd ${{ env.OPENWRT_PATH }}
         
-        MK_VERSION=$(grep "VERSION_NUMBER:=" include/version.mk | grep -oE "[0-9]+\.[0-9]+(\.[0-9]+)?" | head -n1)
+        # 提取主版本号 (如 24.10)，忽略后续修订号或 Hash
+        MK_VERSION=$(grep "VERSION_NUMBER:=" include/version.mk | grep -oE "[0-9]+\.[0-9]+" | head -n1)
         
         if [ -z "$MK_VERSION" ]; then
-          MK_VERSION=$(grep "VERSION_CODE:=" include/version.mk | cut -d'=' -f2 | tr -d ' ' | tr -cd '[:alnum:]._-' | sed 's/$(.*)//g')
+          MK_VERSION=$(grep "VERSION_CODE:=" include/version.mk | cut -d'=' -f2 | tr -d ' ' | tr -cd '[:alnum:].' | cut -d'.' -f1,2)
         fi
         [ -z "$MK_VERSION" ] && MK_VERSION="SNAPSHOT"
         
-        GIT_VER=$(git rev-parse --short HEAD || echo "unknown")
-        
-        OWRT_REAL_VER=$(echo "${MK_VERSION}-${GIT_VER}" | tr -cd '[:alnum:]._-')
+        # 确定最终用于显示的纯净版本号
+        OWRT_REAL_VER=$(echo "$MK_VERSION" | tr -cd '[:alnum:].')
         
         echo "OWRT_REAL_VERSION=$OWRT_REAL_VER" >> $GITHUB_ENV
-        echo "✅ 最终确定的安全版本号: $OWRT_REAL_VER"
+        echo "✅ 最终确定的版本号: $OWRT_REAL_VER"
 
         [ -f "$GITHUB_WORKSPACE/$DIY_P1_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P1_SH" && "$GITHUB_WORKSPACE/$DIY_P1_SH"
         ./scripts/feeds update -a && ./scripts/feeds install -a
@@ -164,11 +165,15 @@ jobs:
         cd $GITHUB_WORKSPACE/outputs
         DEVICE="${{ env.TARGET_ID }}"
         VERSION="${{ env.OWRT_REAL_VERSION }}"
+        SRC_DATE="${{ env.COMMIT_DATE }}"
+        
+        # Tag 命名建议保留设备名以作区分
         TAG="${DEVICE}-v${VERSION}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
         
+        # 修改后的发布信息展示
         gh release create "$TAG" ./* \
           --title "R${{ env.DATE }} - ${DEVICE}" \
-          --notes "🏷️ 版本: ${VERSION} | 💻 标识: ${DEVICE} | 🏗️ 架构: ${AUTO_ARCH} | 🌐 IP: 192.168.100.252"
+          --notes "🏷️ 版本: ${VERSION} | 📅 源码日期: ${SRC_DATE} | 🏗️ 架构: ${AUTO_ARCH} | 🌐 IP: 192.168.100.252"
         
         CLEAN_FILTER="${DEVICE}-v"
         OLD_RELEASES=$(gh release list --limit 100 | awk -F '\t' '{print $3}' | grep "^${CLEAN_FILTER}" | tail -n +4)
