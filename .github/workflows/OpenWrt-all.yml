@@ -81,7 +81,6 @@ jobs:
         git clone -b $REPO_BRANCH --single-branch --depth 1 $REPO_URL $OPENWRT_NAME
         echo "OPENWRT_PATH=${GITHUB_WORKSPACE}/${OPENWRT_NAME}" >> $GITHUB_ENV
         cd $OPENWRT_NAME
-        # 🌟 保留优化：修复由于内嵌双引号导致的潜在解析错误
         echo "COMMIT_DATE=$(git show -s --date=short --format='%ci' | awk '{print $1}')" >> $GITHUB_ENV
         echo "REPO_HASH=$(echo $REPO_URL | md5sum | cut -c1-8)" >> $GITHUB_ENV
 
