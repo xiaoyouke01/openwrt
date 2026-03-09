@@ -60,8 +60,11 @@ jobs:
       with:
         tool-cache: true
         android: true
+        dotnet: true
+        haskell: true
         large-packages: true
         docker-images: true
+        swap-storage: true
 
     - name: 4. 环境部署
       run: |
