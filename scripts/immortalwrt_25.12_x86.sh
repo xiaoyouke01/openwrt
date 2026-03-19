@@ -125,8 +125,8 @@ git_sparse_clone main https://github.com/linkease/istore luci
 [ -d package/luci ] && mv package/luci package/luci-app-istore
 
 # 添加rtp2httpd
-git_sparse_clone https://github.com/stackia/rtp2httpd/tree/main/openwrt-support/luci-app-rtp2httpd
-git_sparse_clone https://github.com/stackia/rtp2httpd/tree/main/openwrt-support/rtp2httpd
+#git_sparse_clone https://github.com/stackia/rtp2httpd/tree/main/openwrt-support/luci-app-rtp2httpd
+#git_sparse_clone https://github.com/stackia/rtp2httpd/tree/main/openwrt-support/rtp2httpd
 
 # 7. 修复与优化编译环境
 # 禁用 Rust 的 LLVM 编译，节省 10GB+ 空间和大量时间
