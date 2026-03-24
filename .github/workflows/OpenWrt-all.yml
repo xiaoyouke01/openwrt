@@ -17,6 +17,7 @@ env:
   OPENWRT_NAME: openwrt
   DIY_P1_SH: scripts/sh/immortalwrt_diy-part1.sh
   TZ: Asia/Shanghai
+  # 解决 Node.js 20 弃用警告，提前适配 Node 24
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -73,7 +74,6 @@ jobs:
         sudo -E apt-get -qq update
         DEPS=$(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu || echo "")
         if [ -z "$DEPS" ]; then
-          echo "⚠️ 无法获取远程依赖列表，使用后备默认依赖..."
           DEPS="ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex gawk gettext gcc-multilib g++-multilib git gnutls-dev gperf haveged help2man intltool lib32gcc-s1 libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply python3-docutils python3-pyelftools qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev zstd"
         fi
         sudo -E apt-get -qq install $DEPS -y
@@ -101,24 +101,30 @@ jobs:
       run: |
         cd ${{ env.OPENWRT_PATH }}
         
+        # 1. 提取源码版本号
         FULL_VER=$(grep "VERSION_NUMBER:=" include/version.mk | grep -oE "[0-9][0-9.]*[0-9]" | head -n1)
         [ -z "$FULL_VER" ] && FULL_VER=$(grep "VERSION_CODE:=" include/version.mk | cut -d'=' -f2 | tr -cd '0-9.' | head -c 10)
         FULL_VER="${FULL_VER:-SNAPSHOT}"
         SHORT_VER=$(echo "$FULL_VER" | cut -d'.' -f1,2)
-        
         echo "OWRT_REAL_VERSION=$FULL_VER" >> $GITHUB_ENV
         echo "OWRT_VER_SHORT=$SHORT_VER" >> $GITHUB_ENV
 
+        # 2. 执行 DIY 脚本
         [ -f "$GITHUB_WORKSPACE/$DIY_P1_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P1_SH" && "$GITHUB_WORKSPACE/$DIY_P1_SH"
         ./scripts/feeds update -a && ./scripts/feeds install -a
         [ -d "$GITHUB_WORKSPACE/files" ] && mv "$GITHUB_WORKSPACE/files" files
         [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ] && cp "$GITHUB_WORKSPACE/$CONFIG_FILE" .config
-        
         [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH" && "$GITHUB_WORKSPACE/$DIY_P2_SH"
         
-        EXTRACTED_IP=$(grep -oE "((192\.168|10\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01]))\.[0-9]+\.[0-9]+)" package/base-files/files/bin/config_generate | head -n1)
-        FINAL_IP="${EXTRACTED_IP:-192.168.1.1}"
+        # 3. 提取最终 IP 地址（通过正则抓取你 sed 修改后的结果）
+        FINAL_IP=$(grep -oE "192\.168\.[0-9]+\.[0-9]+" package/base-files/files/bin/config_generate | head -n1)
+        FINAL_IP="${FINAL_IP:-192.168.1.1}"
         echo "DEFAULT_IP=$FINAL_IP" >> $GITHUB_ENV
+
+        echo "=========================================="
+        echo "✅ 源码版本: $FULL_VER"
+        echo "✅ 后台地址: $FINAL_IP"
+        echo "=========================================="
 
         echo "CONFIG_CCACHE=y" >> .config
         make defconfig
@@ -161,41 +167,50 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # 1. 获取架构信息
+        # 1. 获取硬件架构
         cd ${{ env.OPENWRT_PATH }}
         TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" .config | cut -d'=' -f2 | tr -d '"')
         TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" .config | cut -d'=' -f2 | tr -d '"')
         AUTO_ARCH="${TARGET_BOARD}/${TARGET_SUBTARGET}"
         
-        # 2. 生成发布信息
-        cd $GITHUB_WORKSPACE/outputs
+        # 2. 准备发布信息（通过环境变量显式传递）
         DEVICE="${{ env.TARGET_ID }}"
         VERSION="${{ env.OWRT_REAL_VERSION }}"
+        IP_ADDR="${{ env.DEFAULT_IP }}"
+        REPO_HASH="${{ env.REPO_HASH }}"
         VER_SHORT="${{ env.OWRT_VER_SHORT }}"
-        FINGERPRINT="ARCH:${AUTO_ARCH}_VER:${VER_SHORT}_SRC:${{ env.REPO_HASH }}"
+        FINGERPRINT="ARCH:${AUTO_ARCH}_VER:${VER_SHORT}_SRC:${REPO_HASH}"
         
+        RELEASE_NOTES="### 🚀 固件编译成功！
+        - **固件版本**: ${VERSION}
+        - **默认后台**: [http://${IP_ADDR}](http://${IP_ADDR})
+        - **源码日期**: ${{ env.COMMIT_DATE }}
+        - **硬件架构**: ${AUTO_ARCH}
+        
+        ---
+        "
+
+        # 3. 创建 Release
+        cd $GITHUB_WORKSPACE/outputs
         TAG="${DEVICE}-v${VERSION}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
-        BASE_INFO="🏷️ 版本: ${VERSION} | 📅 源码日期: ${{ env.COMMIT_DATE }} | 🏗️ 架构: ${AUTO_ARCH} | 🌐 IP: ${{ env.DEFAULT_IP }}"
-        # 存入指纹注释以便后期识别
-        TOTAL_BODY="${BASE_INFO} "
         
-        # 3. 创建新 Release
-        gh release create "$TAG" ./* --title "R${{ env.DATE }} - ${DEVICE}" --notes "$TOTAL_BODY"
+        gh release create "$TAG" ./* \
+          --title "R${{ env.DATE }} - ${DEVICE}" \
+          --notes "$RELEASE_NOTES"
         
-        # 4. 执行清理（保留最近 3 个符合该指纹的 Release）
-        echo "🔍 正在搜索匹配指纹的旧版本: ${FINGERPRINT}"
-        
-        # 获取所有包含该指纹的 Tag 列表（gh 默认按时间倒序排列，最新的在最上面）
+        # 4. 自动清理（保留最新的 3 个符合指纹的 Release）
+        echo "🔍 正在按指纹搜索旧版本: ${FINGERPRINT}"
+        # gh release list 默认按时间倒序
         MATCHING_TAGS=$(gh release list --limit 100 --json tagName,body --jq ".[] | select(.body | contains(\"FINGERPRINT:${FINGERPRINT}\")) | .tagName")
         
-        # tail -n +4 表示从第 4 行开始显示，即跳过前 3 个（保留最新的 3 个）
+        # tail -n +4 表示跳过前 3 行（即保留最新的 3 个 Release）
         OLD_RELEASES=$(echo "$MATCHING_TAGS" | tail -n +4)
         
         if [ -n "$OLD_RELEASES" ]; then
           for rel in $OLD_RELEASES; do
-            echo "🗑️ 发现旧版本，正在清理: $rel"
+            echo "🗑️ 正在清理过时的 Release: $rel"
             gh release delete "$rel" --yes --cleanup-tag
           done
         else
-          echo "✨ 未发现需要清理的旧版本。"
+          echo "✨ 未发现多余的旧版本，清理完成。"
         fi
