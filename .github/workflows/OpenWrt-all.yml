@@ -1,4 +1,4 @@
-Name: OpenWrt_all
+name: OpenWrt_all
 
 on:
   workflow_dispatch:
@@ -155,7 +155,7 @@ jobs:
           echo "has_artifacts=false" >> $GITHUB_OUTPUT
         fi
 
-    - name: 9.5 备份固件到 Artifacts
+    - name: 10. 备份固件到 Artifacts
       uses: actions/upload-artifact@v4
       if: steps.compile.outputs.status == 'success' && steps.organize.outputs.has_artifacts == 'true'
       with:
@@ -163,7 +163,7 @@ jobs:
         path: ${{ github.workspace }}/outputs/
         retention-days: 7
 
-    - name: 10. 发布 Release (指纹全量固化)
+    - name: 11. 发布 Release (指纹全量固化)
       if: steps.compile.outputs.status == 'success' && steps.organize.outputs.has_artifacts == 'true' && !cancelled()
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
