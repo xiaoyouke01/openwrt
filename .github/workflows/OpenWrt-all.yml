@@ -17,7 +17,7 @@ env:
   OPENWRT_NAME: openwrt
   DIY_P1_SH: scripts/sh/immortalwrt_diy-part1.sh
   TZ: Asia/Shanghai
-  # 解决 Node.js 20 弃用警告，提前适配 Node 24
+  # 提前适配 Node 24，消除构建警告
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -101,7 +101,7 @@ jobs:
       run: |
         cd ${{ env.OPENWRT_PATH }}
         
-        # 1. 提取源码版本号
+        # 1. 提取版本号
         FULL_VER=$(grep "VERSION_NUMBER:=" include/version.mk | grep -oE "[0-9][0-9.]*[0-9]" | head -n1)
         [ -z "$FULL_VER" ] && FULL_VER=$(grep "VERSION_CODE:=" include/version.mk | cut -d'=' -f2 | tr -cd '0-9.' | head -c 10)
         FULL_VER="${FULL_VER:-SNAPSHOT}"
@@ -109,21 +109,21 @@ jobs:
         echo "OWRT_REAL_VERSION=$FULL_VER" >> $GITHUB_ENV
         echo "OWRT_VER_SHORT=$SHORT_VER" >> $GITHUB_ENV
 
-        # 2. 执行 DIY 脚本
+        # 2. 执行 DIY 脚本 (在此步骤修改 IP)
         [ -f "$GITHUB_WORKSPACE/$DIY_P1_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P1_SH" && "$GITHUB_WORKSPACE/$DIY_P1_SH"
         ./scripts/feeds update -a && ./scripts/feeds install -a
         [ -d "$GITHUB_WORKSPACE/files" ] && mv "$GITHUB_WORKSPACE/files" files
         [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ] && cp "$GITHUB_WORKSPACE/$CONFIG_FILE" .config
         [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH" && "$GITHUB_WORKSPACE/$DIY_P2_SH"
         
-        # 3. 提取最终 IP 地址（通过正则抓取你 sed 修改后的结果）
-        FINAL_IP=$(grep -oE "192\.168\.[0-9]+\.[0-9]+" package/base-files/files/bin/config_generate | head -n1)
+        # 3. 全网段抓取最终 IP (支持 192.168 / 10.x / 172.x)
+        FINAL_IP=$(grep -oE "((192\.168|10\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01]))\.[0-9]+\.[0-9]+)" package/base-files/files/bin/config_generate | head -n1)
         FINAL_IP="${FINAL_IP:-192.168.1.1}"
         echo "DEFAULT_IP=$FINAL_IP" >> $GITHUB_ENV
 
         echo "=========================================="
-        echo "✅ 源码版本: $FULL_VER"
-        echo "✅ 后台地址: $FINAL_IP"
+        echo "✅ 最终源码版本: $FULL_VER"
+        echo "✅ 最终后台地址: $FINAL_IP"
         echo "=========================================="
 
         echo "CONFIG_CCACHE=y" >> .config
@@ -167,13 +167,13 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # 1. 获取硬件架构
+        # 1. 动态获取底层架构信息
         cd ${{ env.OPENWRT_PATH }}
         TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" .config | cut -d'=' -f2 | tr -d '"')
         TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" .config | cut -d'=' -f2 | tr -d '"')
         AUTO_ARCH="${TARGET_BOARD}/${TARGET_SUBTARGET}"
         
-        # 2. 准备发布信息（通过环境变量显式传递）
+        # 2. 固化发布信息变量
         DEVICE="${{ env.TARGET_ID }}"
         VERSION="${{ env.OWRT_REAL_VERSION }}"
         IP_ADDR="${{ env.DEFAULT_IP }}"
@@ -181,36 +181,32 @@ jobs:
         VER_SHORT="${{ env.OWRT_VER_SHORT }}"
         FINGERPRINT="ARCH:${AUTO_ARCH}_VER:${VER_SHORT}_SRC:${REPO_HASH}"
         
-        RELEASE_NOTES="### 🚀 固件编译成功！
+        # 3. 构造 Release 内容
+        RELEASE_NOTES="### 🚀 固件信息
         - **固件版本**: ${VERSION}
-        - **默认后台**: [http://${IP_ADDR}](http://${IP_ADDR})
+        - **后台地址**: [http://${IP_ADDR}](http://${IP_ADDR})
         - **源码日期**: ${{ env.COMMIT_DATE }}
         - **硬件架构**: ${AUTO_ARCH}
         
         ---
         "
 
-        # 3. 创建 Release
         cd $GITHUB_WORKSPACE/outputs
         TAG="${DEVICE}-v${VERSION}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
         
+        # 创建 Release
         gh release create "$TAG" ./* \
           --title "R${{ env.DATE }} - ${DEVICE}" \
           --notes "$RELEASE_NOTES"
         
-        # 4. 自动清理（保留最新的 3 个符合指纹的 Release）
-        echo "🔍 正在按指纹搜索旧版本: ${FINGERPRINT}"
-        # gh release list 默认按时间倒序
+        # 4. 执行清理逻辑 (保留最近 3 个符合指纹的版本)
+        echo "🔍 正在匹配指纹进行清理: ${FINGERPRINT}"
         MATCHING_TAGS=$(gh release list --limit 100 --json tagName,body --jq ".[] | select(.body | contains(\"FINGERPRINT:${FINGERPRINT}\")) | .tagName")
-        
-        # tail -n +4 表示跳过前 3 行（即保留最新的 3 个 Release）
         OLD_RELEASES=$(echo "$MATCHING_TAGS" | tail -n +4)
         
         if [ -n "$OLD_RELEASES" ]; then
           for rel in $OLD_RELEASES; do
-            echo "🗑️ 正在清理过时的 Release: $rel"
+            echo "🗑️ 清理旧版本: $rel"
             gh release delete "$rel" --yes --cleanup-tag
           done
-        else
-          echo "✨ 未发现多余的旧版本，清理完成。"
         fi
