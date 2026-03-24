@@ -1,4 +1,4 @@
-name: OpenWrt_all
+Name: OpenWrt_all
 
 on:
   workflow_dispatch:
@@ -155,6 +155,14 @@ jobs:
           echo "has_artifacts=false" >> $GITHUB_OUTPUT
         fi
 
+    - name: 9.5 备份固件到 Artifacts
+      uses: actions/upload-artifact@v4
+      if: steps.compile.outputs.status == 'success' && steps.organize.outputs.has_artifacts == 'true'
+      with:
+        name: OpenWrt_firmware_${{ env.TARGET_ID }}_${{ env.OWRT_REAL_VERSION }}
+        path: ${{ github.workspace }}/outputs/
+        retention-days: 7
+
     - name: 10. 发布 Release (指纹全量固化)
       if: steps.compile.outputs.status == 'success' && steps.organize.outputs.has_artifacts == 'true' && !cancelled()
       env:
@@ -184,7 +192,7 @@ jobs:
         
         echo "🔍 清理指纹: ${FINGERPRINT}"
         OLD_RELEASES=$(gh release list --limit 100 --json tagName,body -q \
-          ".[] | select(.body | contains(\"${FINGERPRINT}\")) | .tagName" | grep -v "^${TAG}$" | tail -n +4)
+          ".[] | select(.body | contains(\"${FINGERPRINT}\")) | .tagName" | grep -v "^${TAG}$" | tail -n +3)
         
         for rel in $OLD_RELEASES; do
           if [ -n "$rel" ]; then
