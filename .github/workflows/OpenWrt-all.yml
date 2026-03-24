@@ -182,7 +182,7 @@ jobs:
         # 5. 执行基于指纹的自动化清理
         echo "🔍 正在匹配指纹进行清理: ${FINGERPRINT}"
         OLD_RELEASES=$(gh release list --limit 100 --json tagName,body -q \
-          ".[] | select(.body | contains(\"FINGERPRINT:${FINGERPRINT}\")) | .tagName" | grep -v "^${TAG}$" | tail -n +4)
+          ".[] | select(.body | contains(\"FINGERPRINT:${FINGERPRINT}\")) | .tagName" | grep -v "^${TAG}$" | tail -n +3)
         
         if [ -n "$OLD_RELEASES" ]; then
           for rel in $OLD_RELEASES; do
