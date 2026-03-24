@@ -85,7 +85,8 @@ jobs:
         echo "OPENWRT_PATH=${GITHUB_WORKSPACE}/${OPENWRT_NAME}" >> $GITHUB_ENV
         cd $OPENWRT_NAME
         echo "COMMIT_DATE=$(git show -s --date=short --format='%ci' | awk '{print $1}')" >> $GITHUB_ENV
-        echo "REPO_HASH=$(echo $REPO_URL | md5sum | cut -c1-8)" >> $GITHUB_ENV
+        # 使用更稳健的哈希提取方式
+        echo "REPO_HASH=$(echo $REPO_URL | md5sum | head -c 8)" >> $GITHUB_ENV
 
     - name: 6. 缓存管理 (CCache)
       uses: HiGarfield/cachewrtbuild@main
@@ -111,7 +112,7 @@ jobs:
         [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ] && cp "$GITHUB_WORKSPACE/$CONFIG_FILE" .config
         [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH" && "$GITHUB_WORKSPACE/$DIY_P2_SH"
         
-        # 改进 1: 提取 IP 时增加去空格处理，提高健壮性
+        # 优化点：提取 IP 增加去空格处理
         RAW_IP=$(grep -oE "((192\.168|10\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01]))\.[0-9]+\.[0-9]+)" package/base-files/files/bin/config_generate | head -n1)
         FINAL_IP=$(echo "$RAW_IP" | tr -d ' ' | head -n1)
         FINAL_IP="${FINAL_IP:-192.168.1.1}"
@@ -164,21 +165,22 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # 1. 获取底层架构
+        # 1. 动态获取架构
         cd ${{ env.OPENWRT_PATH }}
         TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" .config | cut -d'=' -f2 | tr -d '"')
         TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" .config | cut -d'=' -f2 | tr -d '"')
         AUTO_ARCH="${TARGET_BOARD}/${TARGET_SUBTARGET}"
         
-        # 2. 计算指纹
+        # 2. 构造高唯一性指纹
         FINGERPRINT="ARCH:${AUTO_ARCH}_VER:${{ env.OWRT_VER_SHORT }}_SRC:${{ env.REPO_HASH }}"
         
-        # 3. 构造 Release 内容
+        # 3. 变量拼接内容
         DEVICE="${{ env.TARGET_ID }}"
         VERSION="${{ env.OWRT_REAL_VERSION }}"
         LB="<"
         RB=">"
         BASE_INFO="🏷️ 版本: ${VERSION} | 📅 源码日期: ${{ env.COMMIT_DATE }} | 🏗️ 架构: ${AUTO_ARCH} | 🌐 IP: ${{ env.DEFAULT_IP }}"
+        # 必须带上 FINGERPRINT: 前缀，作为清理时的“暗号”
         TOTAL_BODY="${BASE_INFO} ${LB}!-- FINGERPRINT:${FINGERPRINT} --${RB}"
         
         # 4. 执行发布
@@ -189,10 +191,13 @@ jobs:
           --title "R${{ env.DATE }} - ${DEVICE}" \
           --notes "$TOTAL_BODY"
         
-        # 5. 改进 2: 使用更稳健的 JQ 检索语法，确保指纹匹配成功
+        # 5. 基于 jq --arg 的高可靠性清理逻辑
         echo "🔍 正在匹配指纹进行清理: ${FINGERPRINT}"
-        QUERY=".[] | select(.body | contains(\"FINGERPRINT:${FINGERPRINT}\")) | .tagName"
-        OLD_RELEASES=$(gh release list --limit 100 --json tagName,body -q "$QUERY" | grep -v "^${TAG}$" | tail -n +4)
+        
+        # 搜索逻辑：查询包含指纹的旧版，排除刚发布的，保留最新的 3 个
+        OLD_RELEASES=$(gh release list --limit 100 --json tagName,body | jq -r \
+          --arg FP "FINGERPRINT:${FINGERPRINT}" \
+          '.[] | select(.body | contains($FP)) | .tagName' | grep -v "^${TAG}$" | tail -n +4)
         
         if [ -n "$OLD_RELEASES" ]; then
           for rel in $OLD_RELEASES; do
