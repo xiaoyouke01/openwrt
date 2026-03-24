@@ -162,51 +162,22 @@ jobs:
         path: ${{ github.workspace }}/outputs/
         retention-days: 7
 
-    - name: 11. 发布 Release 并自动清理
+    - name: 11. 发布 Release 并自动清理 (指纹防丢增强)
       if: steps.compile.outputs.status == 'success' && steps.organize.outputs.has_artifacts == 'true' && !cancelled()
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # 1. 动态获取底层架构信息
+        # 1. 动态获取架构信息
         cd ${{ env.OPENWRT_PATH }}
         TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" .config | cut -d'=' -f2 | tr -d '"')
         TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" .config | cut -d'=' -f2 | tr -d '"')
         AUTO_ARCH="${TARGET_BOARD}/${TARGET_SUBTARGET}"
         
-        # 2. 固化发布信息变量
-        DEVICE="${{ env.TARGET_ID }}"
-        VERSION="${{ env.OWRT_REAL_VERSION }}"
-        IP_ADDR="${{ env.DEFAULT_IP }}"
-        REPO_HASH="${{ env.REPO_HASH }}"
-        VER_SHORT="${{ env.OWRT_VER_SHORT }}"
-        FINGERPRINT="ARCH:${AUTO_ARCH}_VER:${VER_SHORT}_SRC:${REPO_HASH}"
+        # 2. 计算发布指纹
+        FINGERPRINT="ARCH:${AUTO_ARCH}_VER:${{ env.OWRT_VER_SHORT }}_SRC:${{ env.REPO_HASH }}"
         
-        # 3. 构造 Release 内容
-        RELEASE_NOTES="### 🚀 固件信息
-        - **固件版本**: ${VERSION}
-        - **后台地址**: [http://${IP_ADDR}](http://${IP_ADDR})
-        - **源码日期**: ${{ env.COMMIT_DATE }}
-        - **硬件架构**: ${AUTO_ARCH}
-        
-        ---
-        "
-
-        cd $GITHUB_WORKSPACE/outputs
-        TAG="${DEVICE}-v${VERSION}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
-        
-        # 创建 Release
-        gh release create "$TAG" ./* \
-          --title "R${{ env.DATE }} - ${DEVICE}" \
-          --notes "$RELEASE_NOTES"
-        
-        # 4. 执行清理逻辑 (保留最近 3 个符合指纹的版本)
-        echo "🔍 正在匹配指纹进行清理: ${FINGERPRINT}"
-        MATCHING_TAGS=$(gh release list --limit 100 --json tagName,body --jq ".[] | select(.body | contains(\"FINGERPRINT:${FINGERPRINT}\")) | .tagName")
-        OLD_RELEASES=$(echo "$MATCHING_TAGS" | tail -n +4)
-        
-        if [ -n "$OLD_RELEASES" ]; then
-          for rel in $OLD_RELEASES; do
-            echo "🗑️ 清理旧版本: $rel"
-            gh release delete "$rel" --yes --cleanup-tag
-          done
-        fi
+        # 3. 构造 Release 内容文件 (解决复制粘贴丢失锚点问题)
+        cat <<EOF > release_notes.md
+        ### 🚀 固件信息
+        - **固件版本**: ${{ env.OWRT_REAL_VERSION }}
+        - **后台地址**: [http://${{ env.DEFAULT_
