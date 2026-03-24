@@ -149,43 +149,40 @@ jobs:
         path: ${{ github.workspace }}/outputs/
         retention-days: 7
 
-    - name: 11. 发布 Release 并自动清理 (最终修正版)
+    - name: 11. 发布 Release (变量拼接指纹版)
       if: steps.compile.outputs.status == 'success' && steps.organize.outputs.has_artifacts == 'true' && !cancelled()
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # 1. 动态获取架构
+        # 1. 获取底层架构
         cd ${{ env.OPENWRT_PATH }}
         TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" .config | cut -d'=' -f2 | tr -d '"')
         TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" .config | cut -d'=' -f2 | tr -d '"')
         AUTO_ARCH="${TARGET_BOARD}/${TARGET_SUBTARGET}"
         
-        # 2. 构造指纹
+        # 2. 计算指纹
         FINGERPRINT="ARCH:${AUTO_ARCH}_VER:${{ env.OWRT_VER_SHORT }}_SRC:${{ env.REPO_HASH }}"
         
-        # 3. 构造 Release 内容文件 (注入指纹行)
-        cat <<EOF > release_notes.md
-        ### 🚀 固件信息
-        - **固件版本**: ${{ env.OWRT_REAL_VERSION }}
-        - **后台地址**: [http://${{ env.DEFAULT_IP }}](http://${{ env.DEFAULT_IP }})
-        - **源码日期**: ${{ env.COMMIT_DATE }}
-        - **硬件架构**: ${AUTO_ARCH}
+        # 3. 构造 Release 内容 (采用变量拼接法)
+        DEVICE="${{ env.TARGET_ID }}"
+        VERSION="${{ env.OWRT_REAL_VERSION }}"
+        LB="<"
+        RB=">"
+        BASE_INFO="🏷️ 版本: ${VERSION} | 📅 源码日期: ${{ env.COMMIT_DATE }} | 🏗️ 架构: ${AUTO_ARCH} | 🌐 IP: ${{ env.DEFAULT_IP }}"
+        TOTAL_BODY="${BASE_INFO} ${LB}!-- FINGERPRINT:${FINGERPRINT} --${RB}"
         
-        ---
-        EOF
-
-        # 4. 创建 Release
+        # 4. 执行发布
         cd $GITHUB_WORKSPACE/outputs
-        TAG="${{ env.TARGET_ID }}-v${{ env.OWRT_REAL_VERSION }}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
+        TAG="${DEVICE}-v${VERSION}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
         
         gh release create "$TAG" ./* \
-          --title "R${{ env.DATE }} - ${{ env.TARGET_ID }}" \
-          --notes-file $GITHUB_WORKSPACE/${{ env.OPENWRT_NAME }}/release_notes.md
+          --title "R${{ env.DATE }} - ${DEVICE}" \
+          --notes "$TOTAL_BODY"
         
-        # 5. 清理旧版本
-        echo "🔍 匹配指纹进行清理: ${FINGERPRINT}"
-        MATCHING_TAGS=$(gh release list --limit 100 --json tagName,body --jq ".[] | select(.body | contains(\"FINGERPRINT:${FINGERPRINT}\")) | .tagName")
-        OLD_RELEASES=$(echo "$MATCHING_TAGS" | tail -n +4)
+        # 5. 执行基于指纹的自动化清理
+        echo "🔍 正在匹配指纹进行清理: ${FINGERPRINT}"
+        OLD_RELEASES=$(gh release list --limit 100 --json tagName,body -q \
+          ".[] | select(.body | contains(\"FINGERPRINT:${FINGERPRINT}\")) | .tagName" | grep -v "^${TAG}$" | tail -n +4)
         
         if [ -n "$OLD_RELEASES" ]; then
           for rel in $OLD_RELEASES; do
