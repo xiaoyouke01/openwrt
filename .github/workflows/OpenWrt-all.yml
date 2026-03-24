@@ -17,7 +17,6 @@ env:
   OPENWRT_NAME: openwrt
   DIY_P1_SH: scripts/sh/immortalwrt_diy-part1.sh
   TZ: Asia/Shanghai
-  # 提前适配 Node 24，消除构建警告
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -100,32 +99,20 @@ jobs:
         CCACHE_BASEDIR: ${{ github.workspace }}
       run: |
         cd ${{ env.OPENWRT_PATH }}
-        
-        # 1. 提取版本号
         FULL_VER=$(grep "VERSION_NUMBER:=" include/version.mk | grep -oE "[0-9][0-9.]*[0-9]" | head -n1)
         [ -z "$FULL_VER" ] && FULL_VER=$(grep "VERSION_CODE:=" include/version.mk | cut -d'=' -f2 | tr -cd '0-9.' | head -c 10)
         FULL_VER="${FULL_VER:-SNAPSHOT}"
         SHORT_VER=$(echo "$FULL_VER" | cut -d'.' -f1,2)
         echo "OWRT_REAL_VERSION=$FULL_VER" >> $GITHUB_ENV
         echo "OWRT_VER_SHORT=$SHORT_VER" >> $GITHUB_ENV
-
-        # 2. 执行 DIY 脚本
         [ -f "$GITHUB_WORKSPACE/$DIY_P1_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P1_SH" && "$GITHUB_WORKSPACE/$DIY_P1_SH"
         ./scripts/feeds update -a && ./scripts/feeds install -a
         [ -d "$GITHUB_WORKSPACE/files" ] && mv "$GITHUB_WORKSPACE/files" files
         [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ] && cp "$GITHUB_WORKSPACE/$CONFIG_FILE" .config
         [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH" && "$GITHUB_WORKSPACE/$DIY_P2_SH"
-        
-        # 3. 全网段抓取最终 IP
         FINAL_IP=$(grep -oE "((192\.168|10\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01]))\.[0-9]+\.[0-9]+)" package/base-files/files/bin/config_generate | head -n1)
         FINAL_IP="${FINAL_IP:-192.168.1.1}"
         echo "DEFAULT_IP=$FINAL_IP" >> $GITHUB_ENV
-
-        echo "=========================================="
-        echo "✅ 最终源码版本: $FULL_VER"
-        echo "✅ 最终后台地址: $FINAL_IP"
-        echo "=========================================="
-
         echo "CONFIG_CCACHE=y" >> .config
         make defconfig
         make download -j8 || make download -j1 V=s
@@ -162,21 +149,21 @@ jobs:
         path: ${{ github.workspace }}/outputs/
         retention-days: 7
 
-    - name: 11. 发布 Release 并自动清理
+    - name: 11. 发布 Release 并自动清理 (修复指纹丢失)
       if: steps.compile.outputs.status == 'success' && steps.organize.outputs.has_artifacts == 'true' && !cancelled()
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # 1. 动态获取架构信息
+        # 1. 获取底层架构
         cd ${{ env.OPENWRT_PATH }}
         TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" .config | cut -d'=' -f2 | tr -d '"')
         TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" .config | cut -d'=' -f2 | tr -d '"')
         AUTO_ARCH="${TARGET_BOARD}/${TARGET_SUBTARGET}"
         
-        # 2. 固化指纹
+        # 2. 固化指纹 (架构+版本+源码Hash)
         FINGERPRINT="ARCH:${AUTO_ARCH}_VER:${{ env.OWRT_VER_SHORT }}_SRC:${{ env.REPO_HASH }}"
         
-        # 3. 构造 Release 说明文件 (注入指纹锚点)
+        # 3. 构造 Release 内容并强制注入指纹 (采用文件模式，防止粘贴丢失)
         cat <<EOF > release_notes.md
         ### 🚀 固件信息
         - **固件版本**: ${{ env.OWRT_REAL_VERSION }}
@@ -187,7 +174,7 @@ jobs:
         ---
         EOF
 
-        # 4. 创建 Release
+        # 4. 执行发布
         cd $GITHUB_WORKSPACE/outputs
         TAG="${{ env.TARGET_ID }}-v${{ env.OWRT_REAL_VERSION }}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
         
@@ -195,14 +182,14 @@ jobs:
           --title "R${{ env.DATE }} - ${{ env.TARGET_ID }}" \
           --notes-file $GITHUB_WORKSPACE/${{ env.OPENWRT_NAME }}/release_notes.md
         
-        # 5. 清理逻辑 (保留最近 3 个符合指纹的版本)
-        echo "🔍 正在匹配指纹进行清理: ${FINGERPRINT}"
+        # 5. 清理逻辑 (现在可以匹配到指纹了)
+        echo "🔍 匹配指纹: ${FINGERPRINT}"
         MATCHING_TAGS=$(gh release list --limit 100 --json tagName,body --jq ".[] | select(.body | contains(\"FINGERPRINT:${FINGERPRINT}\")) | .tagName")
         OLD_RELEASES=$(echo "$MATCHING_TAGS" | tail -n +4)
         
         if [ -n "$OLD_RELEASES" ]; then
           for rel in $OLD_RELEASES; do
-            echo "🗑️ 清理旧版本: $rel"
+            echo "🗑️ 清理: $rel"
             gh release delete "$rel" --yes --cleanup-tag
           done
         fi
