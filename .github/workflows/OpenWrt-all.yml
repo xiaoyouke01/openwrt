@@ -115,15 +115,10 @@ jobs:
         [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ] && cp "$GITHUB_WORKSPACE/$CONFIG_FILE" .config
         [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH" && "$GITHUB_WORKSPACE/$DIY_P2_SH"
         
-        # 3. 全网段抓取最终 IP
+        # 3. 全网段抓取 IP (10.x, 172.x, 192.168.x)
         FINAL_IP=$(grep -oE "((192\.168|10\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01]))\.[0-9]+\.[0-9]+)" package/base-files/files/bin/config_generate | head -n1)
         FINAL_IP="${FINAL_IP:-192.168.1.1}"
         echo "DEFAULT_IP=$FINAL_IP" >> $GITHUB_ENV
-
-        echo "=========================================="
-        echo "✅ 最终源码版本: $FULL_VER"
-        echo "✅ 最终后台地址: $FINAL_IP"
-        echo "=========================================="
 
         echo "CONFIG_CCACHE=y" >> .config
         make defconfig
@@ -161,18 +156,18 @@ jobs:
         path: ${{ github.workspace }}/outputs/
         retention-days: 7
 
-    - name: 11. 发布 Release 并自动清理
+    - name: 11. 发布 Release 并自动清理 (防丢失增强版)
       if: steps.compile.outputs.status == 'success' && steps.organize.outputs.has_artifacts == 'true' && !cancelled()
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # 1. 动态获取底层架构信息
+        # 1. 动态架构感知
         cd ${{ env.OPENWRT_PATH }}
         TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" .config | cut -d'=' -f2 | tr -d '"')
         TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" .config | cut -d'=' -f2 | tr -d '"')
         AUTO_ARCH="${TARGET_BOARD}/${TARGET_SUBTARGET}"
         
-        # 2. 固化发布信息变量
+        # 2. 生成发布指纹
         DEVICE="${{ env.TARGET_ID }}"
         VERSION="${{ env.OWRT_REAL_VERSION }}"
         IP_ADDR="${{ env.DEFAULT_IP }}"
@@ -180,32 +175,31 @@ jobs:
         VER_SHORT="${{ env.OWRT_VER_SHORT }}"
         FINGERPRINT="ARCH:${AUTO_ARCH}_VER:${VER_SHORT}_SRC:${REPO_HASH}"
         
-        # 3. 构造 Release 内容 (补全了最后的指纹锚点)
-        RELEASE_NOTES="### 🚀 固件信息
-        - **固件版本**: ${VERSION}
-        - **后台地址**: [http://${IP_ADDR}](http://${IP_ADDR})
-        - **源码日期**: ${{ env.COMMIT_DATE }}
-        - **硬件架构**: ${AUTO_ARCH}
-        
-        ---
-        "
+        # 3. 构造发布说明并写入临时文件 (防止复制粘贴丢失锚点)
+        echo "### 🚀 固件信息" > release_notes.md
+        echo "- **固件版本**: ${VERSION}" >> release_notes.md
+        echo "- **后台地址**: [http://${IP_ADDR}](http://${IP_ADDR})" >> release_notes.md
+        echo "- **源码日期**: ${{ env.COMMIT_DATE }}" >> release_notes.md
+        echo "- **硬件架构**: ${AUTO_ARCH}" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "---" >> release_notes.md
+        echo "" >> release_notes.md
 
+        # 4. 执行创建 Release
         cd $GITHUB_WORKSPACE/outputs
         TAG="${DEVICE}-v${VERSION}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
-        
-        # 创建 Release
         gh release create "$TAG" ./* \
           --title "R${{ env.DATE }} - ${DEVICE}" \
-          --notes "$RELEASE_NOTES"
+          --notes-file $GITHUB_WORKSPACE/${{ env.OPENWRT_NAME }}/release_notes.md
         
-        # 4. 执行清理逻辑
-        echo "🔍 正在匹配指纹进行清理: ${FINGERPRINT}"
+        # 5. 清理逻辑 (保留最近 3 个)
+        echo "🔍 正在匹配指纹清理旧版本: ${FINGERPRINT}"
         MATCHING_TAGS=$(gh release list --limit 100 --json tagName,body --jq ".[] | select(.body | contains(\"FINGERPRINT:${FINGERPRINT}\")) | .tagName")
         OLD_RELEASES=$(echo "$MATCHING_TAGS" | tail -n +4)
         
         if [ -n "$OLD_RELEASES" ]; then
           for rel in $OLD_RELEASES; do
-            echo "🗑️ 清理旧版本: $rel"
+            echo "🗑️ 清理: $rel"
             gh release delete "$rel" --yes --cleanup-tag
           done
         fi
