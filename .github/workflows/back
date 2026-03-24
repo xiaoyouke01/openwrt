@@ -17,6 +17,8 @@ env:
   OPENWRT_NAME: openwrt
   DIY_P1_SH: scripts/sh/immortalwrt_diy-part1.sh
   TZ: Asia/Shanghai
+  # 添加下面这一行，消除警告并提前适配 Node 24
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
@@ -155,7 +157,15 @@ jobs:
           echo "has_artifacts=false" >> $GITHUB_OUTPUT
         fi
 
-    - name: 10. 发布 Release (指纹全量固化)
+    - name: 10. 备份固件到 Artifacts
+      uses: actions/upload-artifact@v4
+      if: steps.compile.outputs.status == 'success' && steps.organize.outputs.has_artifacts == 'true'
+      with:
+        name: OpenWrt_firmware_${{ env.TARGET_ID }}_${{ env.OWRT_REAL_VERSION }}
+        path: ${{ github.workspace }}/outputs/
+        retention-days: 7
+
+    - name: 11. 发布 Release (指纹全量固化)
       if: steps.compile.outputs.status == 'success' && steps.organize.outputs.has_artifacts == 'true' && !cancelled()
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -184,7 +194,7 @@ jobs:
         
         echo "🔍 清理指纹: ${FINGERPRINT}"
         OLD_RELEASES=$(gh release list --limit 100 --json tagName,body -q \
-          ".[] | select(.body | contains(\"${FINGERPRINT}\")) | .tagName" | grep -v "^${TAG}$" | tail -n +4)
+          ".[] | select(.body | contains(\"${FINGERPRINT}\")) | .tagName" | grep -v "^${TAG}$" | tail -n +3)
         
         for rel in $OLD_RELEASES; do
           if [ -n "$rel" ]; then
