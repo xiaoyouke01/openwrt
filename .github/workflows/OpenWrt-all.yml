@@ -105,8 +105,14 @@ jobs:
         SHORT_VER=$(echo "$FULL_VER" | cut -d'.' -f1,2)
         echo "OWRT_REAL_VERSION=$FULL_VER" >> $GITHUB_ENV
         echo "OWRT_VER_SHORT=$SHORT_VER" >> $GITHUB_ENV
+        
         [ -f "$GITHUB_WORKSPACE/$DIY_P1_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P1_SH" && "$GITHUB_WORKSPACE/$DIY_P1_SH"
-        ./scripts/feeds update -a && ./scripts/feeds install -a
+        
+        # 修复依赖警告：强制运行两遍 install，确保依赖关系链闭环
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+        ./scripts/feeds install -a
+        
         [ -d "$GITHUB_WORKSPACE/files" ] && mv "$GITHUB_WORKSPACE/files" files
         [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ] && cp "$GITHUB_WORKSPACE/$CONFIG_FILE" .config
         [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH" && "$GITHUB_WORKSPACE/$DIY_P2_SH"
@@ -190,10 +196,11 @@ jobs:
         echo "🧹 开始执行清理逻辑..."
         TAG_PREFIX="${DEVICE}-"
         
-        # 提取当前设备的所有 Tag，排除刚发布的和其他设备的，保留最新 3 个，输出其余的
+        # 使用 grep -v 强制排除刚发布的 Tag (防 API 延迟)，tail -n +3 严格保留最新的 2 个旧版本
+        # 最终效果：该设备在仓库中永远只保留最新的 3 个 Release
         OLD_RELEASES=$(gh release list --limit 100 --json tagName | jq -r \
           --arg prefix "$TAG_PREFIX" \
-          '.[] | select(.tagName | startswith($prefix)) | .tagName' | tail -n +4)
+          '.[] | select(.tagName | startswith($prefix)) | .tagName' | grep -v "^${TAG}$" | tail -n +3)
         
         # 执行删除
         if [ -n "$OLD_RELEASES" ]; then
@@ -203,5 +210,5 @@ jobs:
           done
           echo "✅ 清理完成！"
         else
-          echo "✨ 当前设备 ($DEVICE) 的历史版本不足 3 个，无需清理。"
+          echo "✨ 当前设备 ($DEVICE) 的历史版本无需清理。"
         fi
