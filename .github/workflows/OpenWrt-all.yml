@@ -79,7 +79,7 @@ jobs:
         sudo -E apt-get -qq autoremove --purge && sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
 
-    - name: 5. 克隆源码并计算指纹
+    - name: 5. 克隆源码与环境准备
       run: |
         git clone -b $REPO_BRANCH --single-branch --depth 1 $REPO_URL $OPENWRT_NAME
         echo "OPENWRT_PATH=${GITHUB_WORKSPACE}/${OPENWRT_NAME}" >> $GITHUB_ENV
@@ -108,16 +108,13 @@ jobs:
         
         [ -f "$GITHUB_WORKSPACE/$DIY_P1_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P1_SH" && "$GITHUB_WORKSPACE/$DIY_P1_SH"
         
-        # 修复依赖警告：强制运行两遍 install，确保依赖关系链闭环
         ./scripts/feeds update -a
-        ./scripts/feeds install -a
         ./scripts/feeds install -a
         
         [ -d "$GITHUB_WORKSPACE/files" ] && mv "$GITHUB_WORKSPACE/files" files
         [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ] && cp "$GITHUB_WORKSPACE/$CONFIG_FILE" .config
         [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH" && "$GITHUB_WORKSPACE/$DIY_P2_SH"
         
-        # 优化：增强 IP 提取稳定性，过滤多余空格和换行
         RAW_IP=$(grep -oE "((192\.168|10\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01]))\.[0-9]+\.[0-9]+)" package/base-files/files/bin/config_generate | head -n1)
         FINAL_IP=$(echo "$RAW_IP" | tr -d ' ' | tr -d '\n' | tr -d '\r')
         FINAL_IP="${FINAL_IP:-192.168.1.1}"
@@ -125,8 +122,8 @@ jobs:
 
         echo "=========================================="
         echo "✅ 识别到源码版本: $FULL_VER"
-        echo "✅ 固件主版本号: $SHORT_VER"
-        echo "✅ 最终后台地址: $FINAL_IP"
+        echo "✅ 匹配设备 ID: ${{ env.TARGET_ID }}"
+        echo "✅ 默认后台地址: $FINAL_IP"
         echo "=========================================="
 
         echo "CONFIG_CCACHE=y" >> .config
@@ -170,39 +167,30 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # 1. 动态获取架构信息
         cd ${{ env.OPENWRT_PATH }}
         TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" .config | cut -d'=' -f2 | tr -d '"')
         TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" .config | cut -d'=' -f2 | tr -d '"')
         AUTO_ARCH="${TARGET_BOARD}/${TARGET_SUBTARGET}"
         
-        # 2. 准备基础信息
         DEVICE="${{ env.TARGET_ID }}"
         VERSION="${{ env.OWRT_REAL_VERSION }}"
         TOTAL_BODY="🏷️ 版本: ${VERSION} | 📅 源码日期: ${{ env.COMMIT_DATE }} | 🏗️ 架构: ${AUTO_ARCH} | 🌐 IP: ${{ env.DEFAULT_IP }}"
         
-        # 3. 构造唯一的 Tag 名称 (以设备 ID 开头，例如 x86_25-...)
         TAG="${DEVICE}-v${VERSION}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
         
-        # 4. 执行发布
         cd $GITHUB_WORKSPACE/outputs
         echo "🚀 正在发布新版本: $TAG"
         gh release create "$TAG" ./* \
           --title "R${{ env.DATE }} - ${DEVICE}" \
           --notes "$TOTAL_BODY"
         
-        # 5. 暴力且精准的清理逻辑 (直接根据 Tag 前缀匹配设备)
         echo "=========================================="
-        echo "🧹 开始执行清理逻辑..."
-        TAG_PREFIX="${DEVICE}-"
+        echo "🧹 正在清理设备 [${DEVICE}] 的旧版本..."
         
-        # 使用 grep -v 强制排除刚发布的 Tag (防 API 延迟)，tail -n +3 严格保留最新的 2 个旧版本
-        # 最终效果：该设备在仓库中永远只保留最新的 3 个 Release
         OLD_RELEASES=$(gh release list --limit 100 --json tagName | jq -r \
-          --arg prefix "$TAG_PREFIX" \
+          --arg prefix "${DEVICE}-" \
           '.[] | select(.tagName | startswith($prefix)) | .tagName' | grep -v "^${TAG}$" | tail -n +3)
         
-        # 执行删除
         if [ -n "$OLD_RELEASES" ]; then
           for rel in $OLD_RELEASES; do
             echo "🗑️ 正在删除旧版本: $rel"
@@ -210,5 +198,5 @@ jobs:
           done
           echo "✅ 清理完成！"
         else
-          echo "✨ 当前设备 ($DEVICE) 的历史版本无需清理。"
+          echo "✨ 该设备历史版本不多，跳过清理。"
         fi
