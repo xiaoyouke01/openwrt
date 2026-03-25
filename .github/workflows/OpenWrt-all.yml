@@ -159,7 +159,7 @@ jobs:
         path: ${{ github.workspace }}/outputs/
         retention-days: 7
 
-    - name: 11. 发布 Release (变量拼接指纹版)
+    - name: 11. 发布 Release 并自动清理
       if: steps.compile.outputs.status == 'success' && steps.organize.outputs.has_artifacts == 'true' && !cancelled()
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -170,37 +170,38 @@ jobs:
         TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" .config | cut -d'=' -f2 | tr -d '"')
         AUTO_ARCH="${TARGET_BOARD}/${TARGET_SUBTARGET}"
         
-        # 2. 构造唯一识别指纹 (ARCH + VER + SRC)
-        FINGERPRINT="ARCH:${AUTO_ARCH}_VER:${{ env.OWRT_VER_SHORT }}_SRC:${{ env.REPO_HASH }}"
-        
-        # 3. 构造 Release 说明 (隐藏指纹标签采用标准 HTML 注释语法)
+        # 2. 准备基础信息
         DEVICE="${{ env.TARGET_ID }}"
         VERSION="${{ env.OWRT_REAL_VERSION }}"
-        BASE_INFO="🏷️ 版本: ${VERSION} | 📅 源码日期: ${{ env.COMMIT_DATE }} | 🏗️ 架构: ${AUTO_ARCH} | 🌐 IP: ${{ env.DEFAULT_IP }}"
-        TOTAL_BODY="${BASE_INFO} "
+        TOTAL_BODY="🏷️ 版本: ${VERSION} | 📅 源码日期: ${{ env.COMMIT_DATE }} | 🏗️ 架构: ${AUTO_ARCH} | 🌐 IP: ${{ env.DEFAULT_IP }}"
+        
+        # 3. 构造唯一的 Tag 名称 (以设备 ID 开头，例如 x86_25-...)
+        TAG="${DEVICE}-v${VERSION}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
         
         # 4. 执行发布
         cd $GITHUB_WORKSPACE/outputs
-        TAG="${DEVICE}-v${VERSION}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
-        
+        echo "🚀 正在发布新版本: $TAG"
         gh release create "$TAG" ./* \
           --title "R${{ env.DATE }} - ${DEVICE}" \
           --notes "$TOTAL_BODY"
         
-        # 5. 自动化清理逻辑 (基于指纹匹配)
-        echo "🔍 正在匹配指纹进行清理: ${FINGERPRINT}"
+        # 5. 暴力且精准的清理逻辑 (直接根据 Tag 前缀匹配设备)
+        echo "=========================================="
+        echo "🧹 开始执行清理逻辑..."
+        TAG_PREFIX="${DEVICE}-"
         
-        # 使用 jq --arg 传参确保字符串安全，通过 xargs 清洗变量
-        RAW_OLD=$(gh release list --limit 100 --json tagName,body | jq -r \
-          --arg FP "FINGERPRINT:${FINGERPRINT}" \
-          '.[] | select(.body | contains($FP)) | .tagName' | grep -v "^${TAG}$" | tail -n +4)
-        OLD_RELEASES=$(echo "$RAW_OLD" | xargs)
+        # 提取当前设备的所有 Tag，排除刚发布的和其他设备的，保留最新 3 个，输出其余的
+        OLD_RELEASES=$(gh release list --limit 100 --json tagName | jq -r \
+          --arg prefix "$TAG_PREFIX" \
+          '.[] | select(.tagName | startswith($prefix)) | .tagName' | tail -n +4)
         
+        # 执行删除
         if [ -n "$OLD_RELEASES" ]; then
           for rel in $OLD_RELEASES; do
-            echo "🗑️ 清理旧版本: $rel"
+            echo "🗑️ 正在删除旧版本: $rel"
             gh release delete "$rel" --yes --cleanup-tag
           done
+          echo "✅ 清理完成！"
         else
-          echo "✨ 仓库内该设备历史版本不足 3 个，跳过清理。"
+          echo "✨ 当前设备 ($DEVICE) 的历史版本不足 3 个，无需清理。"
         fi
