@@ -17,7 +17,6 @@ env:
   OPENWRT_NAME: openwrt
   DIY_P1_SH: scripts/sh/immortalwrt_diy-part1.sh
   TZ: Asia/Shanghai
-  # 添加下面这一行，消除警告并提前适配 Node 24
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -74,7 +73,6 @@ jobs:
         sudo -E apt-get -qq update
         DEPS=$(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu || echo "")
         if [ -z "$DEPS" ]; then
-          echo "⚠️ 无法获取远程依赖列表，使用后备默认依赖..."
           DEPS="ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex gawk gettext gcc-multilib g++-multilib git gnutls-dev gperf haveged help2man intltool lib32gcc-s1 libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply python3-docutils python3-pyelftools qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev zstd"
         fi
         sudo -E apt-get -qq install $DEPS -y
@@ -87,7 +85,7 @@ jobs:
         echo "OPENWRT_PATH=${GITHUB_WORKSPACE}/${OPENWRT_NAME}" >> $GITHUB_ENV
         cd $OPENWRT_NAME
         echo "COMMIT_DATE=$(git show -s --date=short --format='%ci' | awk '{print $1}')" >> $GITHUB_ENV
-        echo "REPO_HASH=$(echo $REPO_URL | md5sum | cut -c1-8)" >> $GITHUB_ENV
+        echo "REPO_HASH=$(echo $REPO_URL | md5sum | head -c 8)" >> $GITHUB_ENV
 
     - name: 6. 缓存管理 (CCache)
       uses: HiGarfield/cachewrtbuild@main
@@ -101,31 +99,33 @@ jobs:
         CCACHE_BASEDIR: ${{ github.workspace }}
       run: |
         cd ${{ env.OPENWRT_PATH }}
-        
-        # 提取版本号
         FULL_VER=$(grep "VERSION_NUMBER:=" include/version.mk | grep -oE "[0-9][0-9.]*[0-9]" | head -n1)
         [ -z "$FULL_VER" ] && FULL_VER=$(grep "VERSION_CODE:=" include/version.mk | cut -d'=' -f2 | tr -cd '0-9.' | head -c 10)
         FULL_VER="${FULL_VER:-SNAPSHOT}"
         SHORT_VER=$(echo "$FULL_VER" | cut -d'.' -f1,2)
-        
         echo "OWRT_REAL_VERSION=$FULL_VER" >> $GITHUB_ENV
         echo "OWRT_VER_SHORT=$SHORT_VER" >> $GITHUB_ENV
-
-        # 执行 DIY 脚本与 feeds 更新
+        
         [ -f "$GITHUB_WORKSPACE/$DIY_P1_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P1_SH" && "$GITHUB_WORKSPACE/$DIY_P1_SH"
-        ./scripts/feeds update -a && ./scripts/feeds install -a
+        
+        # 修复依赖警告：强制运行两遍 install，确保依赖关系链闭环
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+        ./scripts/feeds install -a
+        
         [ -d "$GITHUB_WORKSPACE/files" ] && mv "$GITHUB_WORKSPACE/files" files
         [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ] && cp "$GITHUB_WORKSPACE/$CONFIG_FILE" .config
-        
         [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH" && "$GITHUB_WORKSPACE/$DIY_P2_SH"
         
-        EXTRACTED_IP=$(grep -oE "((192\.168|10\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01]))\.[0-9]+\.[0-9]+)" package/base-files/files/bin/config_generate | head -n1)
-        FINAL_IP="${EXTRACTED_IP:-192.168.1.1}"
+        # 优化：增强 IP 提取稳定性，过滤多余空格和换行
+        RAW_IP=$(grep -oE "((192\.168|10\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01]))\.[0-9]+\.[0-9]+)" package/base-files/files/bin/config_generate | head -n1)
+        FINAL_IP=$(echo "$RAW_IP" | tr -d ' ' | tr -d '\n' | tr -d '\r')
+        FINAL_IP="${FINAL_IP:-192.168.1.1}"
         echo "DEFAULT_IP=$FINAL_IP" >> $GITHUB_ENV
 
         echo "=========================================="
         echo "✅ 识别到源码版本: $FULL_VER"
-        echo "✅ 清理参考指纹: $SHORT_VER"
+        echo "✅ 固件主版本号: $SHORT_VER"
         echo "✅ 最终后台地址: $FINAL_IP"
         echo "=========================================="
 
@@ -165,40 +165,50 @@ jobs:
         path: ${{ github.workspace }}/outputs/
         retention-days: 7
 
-    - name: 11. 发布 Release (指纹全量固化)
+    - name: 11. 发布 Release 并自动清理
       if: steps.compile.outputs.status == 'success' && steps.organize.outputs.has_artifacts == 'true' && !cancelled()
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
+        # 1. 动态获取架构信息
         cd ${{ env.OPENWRT_PATH }}
         TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" .config | cut -d'=' -f2 | tr -d '"')
         TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" .config | cut -d'=' -f2 | tr -d '"')
         AUTO_ARCH="${TARGET_BOARD}/${TARGET_SUBTARGET}"
         
-        cd $GITHUB_WORKSPACE/outputs
+        # 2. 准备基础信息
         DEVICE="${{ env.TARGET_ID }}"
         VERSION="${{ env.OWRT_REAL_VERSION }}"
-        VER_SHORT="${{ env.OWRT_VER_SHORT }}"
+        TOTAL_BODY="🏷️ 版本: ${VERSION} | 📅 源码日期: ${{ env.COMMIT_DATE }} | 🏗️ 架构: ${AUTO_ARCH} | 🌐 IP: ${{ env.DEFAULT_IP }}"
         
-        FINGERPRINT="ARCH:${AUTO_ARCH}_VER:${VER_SHORT}_SRC:${{ env.REPO_HASH }}"
+        # 3. 构造唯一的 Tag 名称 (以设备 ID 开头，例如 x86_25-...)
         TAG="${DEVICE}-v${VERSION}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
         
-        LB="<"
-        RB=">"
-        BASE_INFO="🏷️ 版本: ${VERSION} | 📅 源码日期: ${{ env.COMMIT_DATE }} | 🏗️ 架构: ${AUTO_ARCH} | 🌐 IP: ${{ env.DEFAULT_IP }}"
-        TOTAL_BODY="${BASE_INFO} ${LB}!-- ${FINGERPRINT} --${RB}"
-        
+        # 4. 执行发布
+        cd $GITHUB_WORKSPACE/outputs
+        echo "🚀 正在发布新版本: $TAG"
         gh release create "$TAG" ./* \
           --title "R${{ env.DATE }} - ${DEVICE}" \
           --notes "$TOTAL_BODY"
         
-        echo "🔍 清理指纹: ${FINGERPRINT}"
-        OLD_RELEASES=$(gh release list --limit 100 --json tagName,body -q \
-          ".[] | select(.body | contains(\"${FINGERPRINT}\")) | .tagName" | grep -v "^${TAG}$" | tail -n +3)
+        # 5. 暴力且精准的清理逻辑 (直接根据 Tag 前缀匹配设备)
+        echo "=========================================="
+        echo "🧹 开始执行清理逻辑..."
+        TAG_PREFIX="${DEVICE}-"
         
-        for rel in $OLD_RELEASES; do
-          if [ -n "$rel" ]; then
-            echo "🗑️ 清理旧版: $rel"
+        # 使用 grep -v 强制排除刚发布的 Tag (防 API 延迟)，tail -n +3 严格保留最新的 2 个旧版本
+        # 最终效果：该设备在仓库中永远只保留最新的 3 个 Release
+        OLD_RELEASES=$(gh release list --limit 100 --json tagName | jq -r \
+          --arg prefix "$TAG_PREFIX" \
+          '.[] | select(.tagName | startswith($prefix)) | .tagName' | grep -v "^${TAG}$" | tail -n +3)
+        
+        # 执行删除
+        if [ -n "$OLD_RELEASES" ]; then
+          for rel in $OLD_RELEASES; do
+            echo "🗑️ 正在删除旧版本: $rel"
             gh release delete "$rel" --yes --cleanup-tag
-          fi
-        done
+          done
+          echo "✅ 清理完成！"
+        else
+          echo "✨ 当前设备 ($DEVICE) 的历史版本无需清理。"
+        fi
