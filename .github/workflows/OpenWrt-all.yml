@@ -85,6 +85,7 @@ jobs:
         echo "OPENWRT_PATH=${GITHUB_WORKSPACE}/${OPENWRT_NAME}" >> $GITHUB_ENV
         cd $OPENWRT_NAME
         echo "COMMIT_DATE=$(git show -s --date=short --format='%ci' | awk '{print $1}')" >> $GITHUB_ENV
+        echo "REPO_HASH=$(echo $REPO_URL | md5sum | head -c 8)" >> $GITHUB_ENV
 
     - name: 6. 缓存 dl 目录
       uses: actions/cache@v4
@@ -109,7 +110,9 @@ jobs:
         FULL_VER=$(grep "VERSION_NUMBER:=" include/version.mk | grep -oE "[0-9][0-9.]*[0-9]" | head -n1)
         [ -z "$FULL_VER" ] && FULL_VER=$(grep "VERSION_CODE:=" include/version.mk | cut -d'=' -f2 | tr -cd '0-9.' | head -c 10)
         FULL_VER="${FULL_VER:-SNAPSHOT}"
+        SHORT_VER=$(echo "$FULL_VER" | cut -d'.' -f1,2)
         echo "OWRT_REAL_VERSION=$FULL_VER" >> $GITHUB_ENV
+        echo "OWRT_VER_SHORT=$SHORT_VER" >> $GITHUB_ENV
         
         [ -f "$GITHUB_WORKSPACE/$DIY_P1_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P1_SH" && "$GITHUB_WORKSPACE/$DIY_P1_SH"
         
@@ -121,7 +124,15 @@ jobs:
         [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH" && "$GITHUB_WORKSPACE/$DIY_P2_SH"
         
         RAW_IP=$(grep -oE "((192\.168|10\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01]))\.[0-9]+\.[0-9]+)" package/base-files/files/bin/config_generate | head -n1)
-        echo "DEFAULT_IP=${RAW_IP:-192.168.1.1}" >> $GITHUB_ENV
+        FINAL_IP="${RAW_IP:-192.168.1.1}"
+        echo "DEFAULT_IP=$FINAL_IP" >> $GITHUB_ENV
+
+        echo "=========================================="
+        echo "✅ 识别到源码版本: $FULL_VER"
+        echo "✅ 匹配设备 ID: ${{ env.TARGET_ID }}"
+        echo "✅ 默认后台地址: $FINAL_IP"
+        echo "✅ 仓库识别码: ${{ env.REPO_HASH }}"
+        echo "=========================================="
 
         echo "CONFIG_CCACHE=y" >> .config
         make defconfig
@@ -160,24 +171,27 @@ jobs:
         retention-days: 7
 
     - name: 12. 发布 Release 并自动清理
-      if: steps.organize.outputs.has_artifacts == 'true' && !cancelled()
+      if: steps.compile.outputs.status == 'success' && steps.organize.outputs.has_artifacts == 'true' && !cancelled()
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        DEVICE="${{ env.TARGET_ID }}"
-        VERSION="${{ env.OWRT_REAL_VERSION }}"
-        TAG="${DEVICE}-v${VERSION}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
-        
         cd ${{ env.OPENWRT_PATH }}
         TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" .config | cut -d'=' -f2 | tr -d '"')
         TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" .config | cut -d'=' -f2 | tr -d '"')
+        
+        DEVICE="${{ env.TARGET_ID }}"
+        VERSION="${{ env.OWRT_REAL_VERSION }}"
+        TAG="${DEVICE}-v${VERSION}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
         
         TOTAL_BODY="🏷️ 版本: ${VERSION} | 📅 源码日期: ${{ env.COMMIT_DATE }} | 🏗️ 架构: ${TARGET_BOARD}/${TARGET_SUBTARGET} | 🌐 IP: ${{ env.DEFAULT_IP }}"
         
         cd $GITHUB_WORKSPACE/outputs
         gh release create "$TAG" ./* --title "R${{ env.DATE }} - ${DEVICE}" --notes "$TOTAL_BODY"
         
+        echo "=========================================="
         echo "🧹 正在清理设备 [${DEVICE}] 的旧版本..."
+        
+        # 精准清理：只针对当前设备 ID，保留最新的 3 个 Release
         OLD_RELEASES=$(gh release list --limit 100 | grep "${DEVICE}-" | awk '{print $1}' | tail -n +4)
         
         if [ -n "$OLD_RELEASES" ]; then
@@ -185,4 +199,8 @@ jobs:
             echo "🗑️ 正在删除旧版本: $rel"
             gh release delete "$rel" --yes --cleanup-tag
           done
+          echo "✅ 清理完成！"
+        else
+          echo "✨ 历史版本不多，跳过清理。"
         fi
+        echo "=========================================="
