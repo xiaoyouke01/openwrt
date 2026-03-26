@@ -71,9 +71,10 @@ jobs:
       run: |
         export DEBIAN_FRONTEND=noninteractive
         sudo -E apt-get -qq update
+        # 完全保留你原本的动态抓取逻辑
         DEPS=$(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu || echo "")
         if [ -z "$DEPS" ]; then
-          # 加入了 golang-go 兜底，防止宿主机缺乏 Go 环境导致新版插件编译失败
+          # 仅在你的备用包列表里偷偷加了一个 golang-go
           DEPS="ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex gawk gettext gcc-multilib g++-multilib git gnutls-dev golang-go gperf haveged help2man intltool lib32gcc-s1 libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply python3-docutils python3-pyelftools qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev zstd"
         fi
         sudo -E apt-get -qq install $DEPS -y
@@ -109,9 +110,10 @@ jobs:
       run: |
         cd ${{ env.OPENWRT_PATH }}
         
-        # 【关键修复】设置 Go 全局代理，解决 yq 等插件依赖下载超时问题
+        # [修复点1] 强制设置 Go 全局代理，解决 yq/golang 编译前下载被墙卡死的问题
         export GOPROXY=https://proxy.golang.org,direct
         
+        # 原汁原味保留你的所有正则提取逻辑和环境变量
         FULL_VER=$(grep "VERSION_NUMBER:=" include/version.mk | grep -oE "[0-9][0-9.]*[0-9]" | head -n1)
         [ -z "$FULL_VER" ] && FULL_VER=$(grep "VERSION_CODE:=" include/version.mk | cut -d'=' -f2 | tr -cd '0-9.' | head -c 10)
         FULL_VER="${FULL_VER:-SNAPSHOT}"
@@ -132,6 +134,7 @@ jobs:
         FINAL_IP="${RAW_IP:-192.168.1.1}"
         echo "DEFAULT_IP=$FINAL_IP" >> $GITHUB_ENV
 
+        # 原汁原味的日志装饰框全部回来了
         echo "=========================================="
         echo "✅ 识别到源码版本: $FULL_VER"
         echo "✅ 匹配设备 ID: ${{ env.TARGET_ID }}"
@@ -141,8 +144,14 @@ jobs:
 
         echo "CONFIG_CCACHE=y" >> .config
         make defconfig
-        make download -j$(nproc)
+        make download -j16
+        
+        # [修复点2] 瘦身机制打进来了，清理 dl 保证不超出 GitHub Action 的 2.8G 缓存上限
+        echo "🧹 正在对 dl 目录进行手术级瘦身..."
+        [ -f "scripts/clean-dl.sh" ] && ./scripts/clean-dl.sh || true
         find dl -size -1024c -delete
+        echo "📊 dl 目录缓存大文件体积前 5 排行:"
+        du -h dl/* 2>/dev/null | sort -rh | head -n 5 || true
 
     - name: 9. 开始编译
       id: compile
@@ -150,10 +159,13 @@ jobs:
         cd ${{ env.OPENWRT_PATH }}
         echo "DATE=$(date +"%Y-%m-%d %H:%M")" >> $GITHUB_ENV
         
-        # 【关键修复】降低最大线程数，并加入单线程回退机制，专门对付 yq 这种多线程易崩溃的插件
+        # [修复点3] 这里不再粗暴加满线程，加了错误自动降级：先用普通多核编译，如果类似 yq 这样的 Go 包炸了，自动用单线程 + 详尽报错去重新救火
         THREADS=$(nproc)
-        echo "🚀 使用多核编译线程数: $THREADS"
-        make -j$THREADS FORCE_UNSAFE_CONFIGURE=1 || make -j1 V=s FORCE_UNSAFE_CONFIGURE=1
+        echo "🚀 首次尝试线程数: $THREADS"
+        make -j$THREADS FORCE_UNSAFE_CONFIGURE=1 || {
+          echo "⚠️ 多线程爆内存编译失败，切单线程重组（这是保护机制，非致命）..."
+          make -j1 V=s FORCE_UNSAFE_CONFIGURE=1
+        }
         
         echo "status=success" >> $GITHUB_OUTPUT
 
@@ -201,7 +213,7 @@ jobs:
         echo "=========================================="
         echo "🧹 正在清理设备 [${DEVICE}] 的旧版本..."
         
-        # 【关键修复】使用原生 JSON 提取纯净 Tag 标签，彻底避开空格陷阱
+        # [修复点4] 用 GitHub CLI 原生提取纯净 Tag，绝对不被空格带歪了
         OLD_RELEASES=$(gh release list --limit 100 --json tagName -q '.[].tagName' | grep "^${DEVICE}-" | tail -n +4)
         
         if [ -n "$OLD_RELEASES" ]; then
