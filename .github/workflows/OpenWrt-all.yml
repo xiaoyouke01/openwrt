@@ -191,14 +191,13 @@ jobs:
         echo "=========================================="
         echo "🧹 正在清理设备 [${DEVICE}] 的旧版本..."
         
-        # 精准获取当前设备的 Tag (第一列)，并保留最新的 3 个
-        OLD_RELEASES=$(gh release list --limit 100 | grep "${DEVICE}-" | awk '{print $1}' | tail -n +4)
+        # 终极修复：使用内置 JSON 解析直接提取 tagName，彻底解决空格和截取错位的问题
+        OLD_RELEASES=$(gh release list --limit 100 --json tagName -q '.[].tagName' | grep "^${DEVICE}-" | tail -n +4)
         
         if [ -n "$OLD_RELEASES" ]; then
           for rel in $OLD_RELEASES; do
             echo "🗑️ 正在尝试删除旧版本: $rel"
-            # 增加 || true 容错，防止因找不到 Release 导致任务报红
-            gh release delete "$rel" --yes --cleanup-tag || true
+            gh release delete "$rel" --yes --cleanup-tag || echo "⚠️ 删除失败，跳过: $rel"
           done
           echo "✅ 清理流程结束"
         else
