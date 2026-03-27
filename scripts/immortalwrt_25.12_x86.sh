@@ -107,7 +107,7 @@ git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall
 # 添加中文版netdata
 #git clone --depth=1 -b master https://github.com/sirpdboy/luci-app-netdata package/luci-app-netdata
 # 添加应用管理
-#git clone --depth=1 -b master https://github.com/destan19/OpenAppFilter package/OpenAppFilter
+git clone --depth=1 -b master https://github.com/destan19/OpenAppFilter package/OpenAppFilter
 # 添加momo
 #git clone --depth=1 -b main https://github.com/nikkinikki-org/OpenWrt-momo package/OpenWrt-momo
 
