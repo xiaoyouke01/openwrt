@@ -71,7 +71,6 @@ jobs:
       run: |
         export DEBIAN_FRONTEND=noninteractive
         sudo -E apt-get -qq update
-        # 完全保留你原本的动态抓取逻辑
         DEPS=$(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu || echo "")
         if [ -z "$DEPS" ]; then
           DEPS="ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex gawk gettext gcc-multilib g++-multilib git gnutls-dev golang-go gperf haveged help2man intltool lib32gcc-s1 libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply python3-docutils python3-pyelftools qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev zstd"
@@ -109,7 +108,7 @@ jobs:
       run: |
         cd ${{ env.OPENWRT_PATH }}
         
-        # 强制设置 Go 全局代理，解决 yq/golang 编译前下载被墙卡死的问题
+        # [优化] 设置 Go 代理，加速依赖下载
         export GOPROXY=https://proxy.golang.org,direct
         
         FULL_VER=$(grep "VERSION_NUMBER:=" include/version.mk | grep -oE "[0-9][0-9.]*[0-9]" | head -n1)
@@ -136,19 +135,25 @@ jobs:
         echo "✅ 识别到源码版本: $FULL_VER"
         echo "✅ 匹配设备 ID: ${{ env.TARGET_ID }}"
         echo "✅ 默认后台地址: $FINAL_IP"
-        echo "✅ 仓库识别码: ${{ env.REPO_HASH }}"
         echo "=========================================="
 
         echo "CONFIG_CCACHE=y" >> .config
         make defconfig
+        # [优化] 使用高速下载策略
         make download -j16 || make download -j1
         
-        # 清理 dl 保证不超出 GitHub Action 的 2.8G 缓存上限
-        echo "🧹 正在对 dl 目录进行手术级瘦身..."
+        echo "🧹 开始针对性清理 dl 目录..."
+        # 1. 移除 Go 编译产生的碎片化缓存
+        rm -rf dl/go-mod-cache
+        # 2. 官方脚本清理旧版本源码
         [ -f "scripts/clean-dl.sh" ] && ./scripts/clean-dl.sh || true
+        # 3. 删除小于 1k 的无效下载文件
         find dl -size -1024c -delete
-        echo "📊 dl 目录缓存大文件体积前 5 排行:"
-        du -h dl/* 2>/dev/null | sort -rh | head -n 5 || true
+        
+        # [优化] 解决 Broken pipe 报错，打印前 5 大文件
+        echo "📊 dl 目录缓存体积前 5 排行:"
+        (du -h dl/* 2>/dev/null | sort -rh | head -n 5) || true
+        echo "=========================================="
 
     - name: 9. 开始编译
       id: compile
@@ -158,8 +163,9 @@ jobs:
         
         THREADS=$(nproc)
         echo "🚀 首次尝试线程数: $THREADS"
+        # 多核失败自动转单核详细报错模式
         make -j$THREADS FORCE_UNSAFE_CONFIGURE=1 || {
-          echo "⚠️ 多线程爆内存编译失败，切单线程重组（这是保护机制，非致命）..."
+          echo "⚠️ 编译失败，正在切换单线程救火..."
           make -j1 V=s FORCE_UNSAFE_CONFIGURE=1
         }
         
@@ -209,7 +215,7 @@ jobs:
         echo "=========================================="
         echo "🧹 正在清理设备 [${DEVICE}] 的旧版本..."
         
-        # 用 GitHub CLI 原生提取纯净 Tag
+        # [优化] 使用 JSON 模式提取精准标签
         OLD_RELEASES=$(gh release list --limit 100 --json tagName -q '.[].tagName' | grep "^${DEVICE}-" | tail -n +4)
         
         if [ -n "$OLD_RELEASES" ]; then
