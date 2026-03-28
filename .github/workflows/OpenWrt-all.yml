@@ -13,6 +13,11 @@ on:
           - 'mt798x_24'
           - 'x86_25'
 
+# 并发控制：同一时间只允许一个相同的工作流运行，新任务会掐断旧任务
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   OPENWRT_NAME: openwrt
   DIY_P1_SH: scripts/sh/immortalwrt_diy-part1.sh
@@ -108,7 +113,7 @@ jobs:
       run: |
         cd ${{ env.OPENWRT_PATH }}
         
-        # [优化] 设置 Go 代理，加速依赖下载
+        # 强制设置 Go 全局代理
         export GOPROXY=https://proxy.golang.org,direct
         
         FULL_VER=$(grep "VERSION_NUMBER:=" include/version.mk | grep -oE "[0-9][0-9.]*[0-9]" | head -n1)
@@ -135,24 +140,24 @@ jobs:
         echo "✅ 识别到源码版本: $FULL_VER"
         echo "✅ 匹配设备 ID: ${{ env.TARGET_ID }}"
         echo "✅ 默认后台地址: $FINAL_IP"
+        echo "✅ 仓库识别码: ${{ env.REPO_HASH }}"
         echo "=========================================="
 
         echo "CONFIG_CCACHE=y" >> .config
         make defconfig
-        # [优化] 使用高速下载策略
+        
+        # 极速并发下载，失败自动切单线程兜底
         make download -j16 || make download -j1
         
+        # 缓存极限瘦身
         echo "🧹 开始针对性清理 dl 目录..."
-        # 1. 移除 Go 编译产生的碎片化缓存
-        rm -rf dl/go-mod-cache
-        # 2. 官方脚本清理旧版本源码
+        rm -rf dl/go-mod-cache dl/cargo
+        
         [ -f "scripts/clean-dl.sh" ] && ./scripts/clean-dl.sh || true
-        # 3. 删除小于 1k 的无效下载文件
         find dl -size -1024c -delete
         
-        # [优化] 解决 Broken pipe 报错，打印前 5 大文件
         echo "📊 dl 目录缓存体积前 5 排行:"
-        (du -h dl/* 2>/dev/null | sort -rh | head -n 5) || true
+        (du -h dl/* 2>/dev/null | sort -rh 2>/dev/null | head -n 5) || true
         echo "=========================================="
 
     - name: 9. 开始编译
@@ -163,9 +168,9 @@ jobs:
         
         THREADS=$(nproc)
         echo "🚀 首次尝试线程数: $THREADS"
-        # 多核失败自动转单核详细报错模式
+        # 柔性编译策略：多线程失败自动切单线程 V=s
         make -j$THREADS FORCE_UNSAFE_CONFIGURE=1 || {
-          echo "⚠️ 编译失败，正在切换单线程救火..."
+          echo "⚠️ 多线程爆内存或冲突失败，切单线程重组（这是保护机制，非致命）..."
           make -j1 V=s FORCE_UNSAFE_CONFIGURE=1
         }
         
@@ -210,12 +215,12 @@ jobs:
         TOTAL_BODY="🏷️ 版本: ${VERSION} | 📅 源码日期: ${{ env.COMMIT_DATE }} | 🏗️ 架构: ${TARGET_BOARD}/${TARGET_SUBTARGET} | 🌐 IP: ${{ env.DEFAULT_IP }}"
         
         cd $GITHUB_WORKSPACE/outputs
+        # 发布时标题自动剔除冗余的版本号，保持整洁
         gh release create "$TAG" ./* --title "R${{ env.DATE }} - ${DEVICE}" --notes "$TOTAL_BODY"
         
         echo "=========================================="
         echo "🧹 正在清理设备 [${DEVICE}] 的旧版本..."
         
-        # [优化] 使用 JSON 模式提取精准标签
         OLD_RELEASES=$(gh release list --limit 100 --json tagName -q '.[].tagName' | grep "^${DEVICE}-" | tail -n +4)
         
         if [ -n "$OLD_RELEASES" ]; then
