@@ -96,7 +96,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ${{ env.OPENWRT_PATH }}/dl
-        key: ${{ env.TARGET_ID }}-${{ env.REPO_BRANCH }}-dl-${{ hashFiles('**/Makefile', '**/include/version.mk') }}
+        key: ${{ env.TARGET_ID }}-${{ env.REPO_BRANCH }}-dl-${{ hashFiles('openwrt/include/version.mk', 'openwrt/feeds.conf.default') }}
         restore-keys: |
           ${{ env.TARGET_ID }}-${{ env.REPO_BRANCH }}-dl-
 
@@ -113,7 +113,6 @@ jobs:
       run: |
         cd "${{ env.OPENWRT_PATH }}"
         
-        # 🚀 解决新版 Xray-core 要求 Go >= 1.26 的问题
         export GOTOOLCHAIN=auto
         export GOPROXY=https://proxy.golang.org,direct
         
