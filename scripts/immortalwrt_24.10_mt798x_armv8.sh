@@ -27,8 +27,8 @@ function git_sparse_clone() {
   cd .. && rm -rf $repodir
 }
 
-# 4. 更新 golang 1.25 版本
-git clone --depth=1 -b 25.x https://github.com/sbwml/packages_lang_golang feeds/packages/lang/golang
+# 4. 更新 golang 1.26 版本
+git clone --depth=1 -b 26.x https://github.com/sbwml/packages_lang_golang feeds/packages/lang/golang
 
 # 5. 主题与常规插件
 # 添加argon主题
