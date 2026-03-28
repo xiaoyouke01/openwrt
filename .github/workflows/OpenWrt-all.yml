@@ -146,8 +146,17 @@ jobs:
         echo "CONFIG_CCACHE=y" >> .config
         make defconfig
         
-        # 极速并发下载，失败自动切单线程兜底
-        make download -j16 || make download -j1
+        # 📊 开始层级化下载
+        echo "⏳ 正在尝试多线程下载 (j16)..."
+        if ! make download -j16; then
+          echo "⚠️ j16 失败，降级至 j8 重试..."
+          if ! make download -j8; then
+            echo "❌ j8 依然失败，进入单线程详细日志模式 (V=s)..."
+            # 最后一次尝试不使用 ||，如果失败直接让 workflow 报错，此时 V=s 会显示所有错误细节
+            make download -j1 V=s
+          fi
+        fi
+        echo "✅ 源码下载完成"
         
         # 缓存极限瘦身
         echo "🧹 开始针对性清理 dl 目录..."
