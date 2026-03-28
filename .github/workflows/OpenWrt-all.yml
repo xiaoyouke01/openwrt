@@ -157,7 +157,7 @@ jobs:
         find dl -size -1024c -delete
         
         echo "📊 dl 目录缓存体积前 5 排行:"
-        (du -h dl/* 2>/dev/null | sort -rh 2>/dev/null | head -n 5) || true
+        (du -h dl/* 2>/dev/null | sort -rh | head -n 5) 2>/dev/null || true
         echo "=========================================="
 
     - name: 9. 开始编译
