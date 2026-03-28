@@ -114,6 +114,7 @@ jobs:
         cd ${{ env.OPENWRT_PATH }}
         
         # 强制设置 Go 全局代理
+        export GOTOOLCHAIN=auto
         export GOPROXY=https://proxy.golang.org,direct
         
         FULL_VER=$(grep "VERSION_NUMBER:=" include/version.mk | grep -oE "[0-9][0-9.]*[0-9]" | head -n1)
@@ -123,7 +124,7 @@ jobs:
         echo "OWRT_REAL_VERSION=$FULL_VER" >> $GITHUB_ENV
         echo "OWRT_VER_SHORT=$SHORT_VER" >> $GITHUB_ENV
         
-        [ -f "$GITHUB_WORKSPACE/$DIY_P1_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P1_SH" && "$GITHUB_WORKSPACE/$DIY_P1_SH"
+[ -f “$GITHUB_WORKSPACE/$DIY_P1_SH” ] && chmod +x “$GITHUB_WORKSPACE/$DIY_P1_SH” & “$GITHUB_WORKSPACE/$DIY_P1_SH”
         
         ./scripts/feeds update -a
         ./scripts/feeds install -a
