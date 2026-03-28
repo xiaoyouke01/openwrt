@@ -6,7 +6,7 @@ on:
       target_device:
         description: '🎯 选择编译目标设备'
         required: true
-        default: 'x86_24'
+        default: 'x86_25'
         type: choice
         options:
           - 'x86_24'
@@ -88,7 +88,7 @@ jobs:
       run: |
         git clone -b $REPO_BRANCH --single-branch --depth 1 $REPO_URL $OPENWRT_NAME
         echo "OPENWRT_PATH=${GITHUB_WORKSPACE}/${OPENWRT_NAME}" >> $GITHUB_ENV
-        cd $OPENWRT_NAME
+        cd "$OPENWRT_NAME"
         echo "COMMIT_DATE=$(git show -s --date=short --format='%ci' | awk '{print $1}')" >> $GITHUB_ENV
         echo "REPO_HASH=$(echo $REPO_URL | md5sum | head -c 8)" >> $GITHUB_ENV
 
@@ -96,7 +96,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ${{ env.OPENWRT_PATH }}/dl
-        key: ${{ env.TARGET_ID }}-${{ env.REPO_BRANCH }}-dl-${{ hashFiles('Makefile', 'include/version.mk') }}
+        key: ${{ env.TARGET_ID }}-${{ env.REPO_BRANCH }}-dl-${{ hashFiles('**/Makefile', '**/include/version.mk') }}
         restore-keys: |
           ${{ env.TARGET_ID }}-${{ env.REPO_BRANCH }}-dl-
 
@@ -111,9 +111,10 @@ jobs:
       env:
         CCACHE_BASEDIR: ${{ github.workspace }}
       run: |
-        cd ${{ env.OPENWRT_PATH }}
+        cd "${{ env.OPENWRT_PATH }}"
         
-        # 强制设置 Go 全局代理
+        # 🚀 解决新版 Xray-core 要求 Go >= 1.26 的问题
+        export GOTOOLCHAIN=auto
         export GOPROXY=https://proxy.golang.org,direct
         
         FULL_VER=$(grep "VERSION_NUMBER:=" include/version.mk | grep -oE "[0-9][0-9.]*[0-9]" | head -n1)
@@ -123,7 +124,7 @@ jobs:
         echo "OWRT_REAL_VERSION=$FULL_VER" >> $GITHUB_ENV
         echo "OWRT_VER_SHORT=$SHORT_VER" >> $GITHUB_ENV
         
-[ -f “$GITHUB_WORKSPACE/$DIY_P1_SH” ] && chmod +x “$GITHUB_WORKSPACE/$DIY_P1_SH” & “$GITHUB_WORKSPACE/$DIY_P1_SH”
+        [ -f "$GITHUB_WORKSPACE/$DIY_P1_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P1_SH" && "$GITHUB_WORKSPACE/$DIY_P1_SH"
         
         ./scripts/feeds update -a
         ./scripts/feeds install -a
@@ -146,40 +147,38 @@ jobs:
         echo "CONFIG_CCACHE=y" >> .config
         make defconfig
         
-        # 📊 开始层级化下载
+        # 📊 极速层级重试下载逻辑
         echo "⏳ 正在尝试多线程下载 (j16)..."
         if ! make download -j16; then
           echo "⚠️ j16 失败，降级至 j8 重试..."
           if ! make download -j8; then
             echo "❌ j8 依然失败，进入单线程详细日志模式 (V=s)..."
-            # 最后一次尝试不使用 ||，如果失败直接让 workflow 报错，此时 V=s 会显示所有错误细节
+            # 失败将直接中断 workflow 并显示 V=s 详细报错
             make download -j1 V=s
           fi
         fi
-        echo "✅ 源码下载完成"
+        echo "✅ 源码下载成功"
         
-        # 缓存极限瘦身
-        echo "🧹 开始针对性清理 dl 目录..."
+        # 🧹 缓存极限清理
         rm -rf dl/go-mod-cache dl/cargo
-        
         [ -f "scripts/clean-dl.sh" ] && ./scripts/clean-dl.sh || true
-        find dl -size -1024c -delete
+        find dl -mindepth 1 -size -1024c -delete 2>/dev/null || true
         
         echo "📊 dl 目录缓存体积前 5 排行:"
-        (du -h dl/* 2>/dev/null | sort -rh | head -n 5) 2>/dev/null || true
+        (du -h dl/* 2>/dev/null | sort -rh | head -n 5) 2>/dev/null || echo "dl 目录为空"
         echo "=========================================="
 
     - name: 9. 开始编译
       id: compile
       run: |
-        cd ${{ env.OPENWRT_PATH }}
+        cd "${{ env.OPENWRT_PATH }}"
         echo "DATE=$(date +"%Y-%m-%d %H:%M")" >> $GITHUB_ENV
         
         THREADS=$(nproc)
         echo "🚀 首次尝试线程数: $THREADS"
-        # 柔性编译策略：多线程失败自动切单线程 V=s
+        # 柔性编译策略：失败自动切单线程保护
         make -j$THREADS FORCE_UNSAFE_CONFIGURE=1 || {
-          echo "⚠️ 多线程爆内存或冲突失败，切单线程重组（这是保护机制，非致命）..."
+          echo "⚠️ 多线程爆内存或冲突失败，正在以单线程详细模式重试..."
           make -j1 V=s FORCE_UNSAFE_CONFIGURE=1
         }
         
@@ -189,7 +188,7 @@ jobs:
       id: organize
       if: steps.compile.outputs.status == 'success'
       run: |
-        cd ${{ env.OPENWRT_PATH }}
+        cd "${{ env.OPENWRT_PATH }}"
         mkdir -p $GITHUB_WORKSPACE/outputs
         find bin/targets -type f -name "${{ env.TARGET_PATTERN }}" ! -name "*.json" ! -name "*.manifest" -exec cp -v {} $GITHUB_WORKSPACE/outputs/ \;
         cd $GITHUB_WORKSPACE/outputs
@@ -213,7 +212,7 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        cd ${{ env.OPENWRT_PATH }}
+        cd "${{ env.OPENWRT_PATH }}"
         TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" .config | cut -d'=' -f2 | tr -d '"')
         TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" .config | cut -d'=' -f2 | tr -d '"')
         
@@ -228,7 +227,6 @@ jobs:
         
         echo "=========================================="
         echo "🧹 正在清理设备 [${DEVICE}] 的旧版本..."
-        
         OLD_RELEASES=$(gh release list --limit 100 --json tagName -q '.[].tagName' | grep "^${DEVICE}-" | tail -n +4)
         
         if [ -n "$OLD_RELEASES" ]; then
