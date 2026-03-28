@@ -13,7 +13,6 @@ on:
           - 'mt798x_24'
           - 'x86_25'
 
-# 并发控制：同一时间只允许一个相同的工作流运行，新任务会掐断旧任务
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -31,205 +30,164 @@ jobs:
       contents: write
 
     steps:
-    - name: 1. 检出代码
-      uses: actions/checkout@v4
+      - name: 1. 检出代码
+        uses: actions/checkout@v4
 
-    - name: 2. 初始化设备环境变量
-      run: |
-        ID="${{ github.event.inputs.target_device }}"
-        echo "TARGET_ID=$ID" >> $GITHUB_ENV
+      - name: 2. 初始化设备环境变量
+        run: |
+          ID="${{ github.event.inputs.target_device }}"
+          echo "TARGET_ID=$ID" >> $GITHUB_ENV
 
-        if [[ "$ID" == "x86_24" ]]; then
-          echo "REPO_URL=https://github.com/immortalwrt/immortalwrt" >> $GITHUB_ENV
-          echo "REPO_BRANCH=openwrt-24.10" >> $GITHUB_ENV
-          echo "CONFIG_FILE=configs/immortalwrt_24.10_x86.config" >> $GITHUB_ENV
-          echo "TARGET_PATTERN=*squashfs-combined-*.img.gz" >> $GITHUB_ENV
-          echo "DIY_P2_SH=scripts/immortalwrt_24.10_x86.sh" >> $GITHUB_ENV
+          if [[ "$ID" == "x86_24" ]]; then
+            echo "REPO_URL=https://github.com/immortalwrt/immortalwrt" >> $GITHUB_ENV
+            echo "REPO_BRANCH=openwrt-24.10" >> $GITHUB_ENV
+            echo "CONFIG_FILE=configs/immortalwrt_24.10_x86.config" >> $GITHUB_ENV
+            echo "TARGET_PATTERN=*squashfs-combined-*.img.gz" >> $GITHUB_ENV
+            echo "DIY_P2_SH=scripts/immortalwrt_24.10_x86.sh" >> $GITHUB_ENV
 
-        elif [[ "$ID" == "mt798x_24" ]]; then
-          echo "REPO_URL=https://github.com/padavanonly/immortalwrt-mt798x-6.6" >> $GITHUB_ENV
-          echo "REPO_BRANCH=openwrt-24.10-6.6" >> $GITHUB_ENV
-          echo "CONFIG_FILE=configs/immortalwrt_24.10_mt798x_armv8.config" >> $GITHUB_ENV
-          echo "TARGET_PATTERN=*sysupgrade.bin" >> $GITHUB_ENV
-          echo "DIY_P2_SH=scripts/immortalwrt_24.10_mt798x_armv8.sh" >> $GITHUB_ENV
+          elif [[ "$ID" == "mt798x_24" ]]; then
+            echo "REPO_URL=https://github.com/padavanonly/immortalwrt-mt798x-6.6" >> $GITHUB_ENV
+            echo "REPO_BRANCH=openwrt-24.10-6.6" >> $GITHUB_ENV
+            echo "CONFIG_FILE=configs/immortalwrt_24.10_mt798x_armv8.config" >> $GITHUB_ENV
+            echo "TARGET_PATTERN=*sysupgrade.bin" >> $GITHUB_ENV
+            echo "DIY_P2_SH=scripts/immortalwrt_24.10_mt798x_armv8.sh" >> $GITHUB_ENV
 
-        elif [[ "$ID" == "x86_25" ]]; then
-          echo "REPO_URL=https://github.com/immortalwrt/immortalwrt" >> $GITHUB_ENV
-          echo "REPO_BRANCH=openwrt-25.12" >> $GITHUB_ENV
-          echo "CONFIG_FILE=configs/immortalwrt_25.12_x86.config" >> $GITHUB_ENV
-          echo "TARGET_PATTERN=*squashfs-combined-*.img.gz" >> $GITHUB_ENV
-          echo "DIY_P2_SH=scripts/immortalwrt_25.12_x86.sh" >> $GITHUB_ENV
-        fi
+          elif [[ "$ID" == "x86_25" ]]; then
+            echo "REPO_URL=https://github.com/immortalwrt/immortalwrt" >> $GITHUB_ENV
+            echo "REPO_BRANCH=openwrt-25.12" >> $GITHUB_ENV
+            echo "CONFIG_FILE=configs/immortalwrt_25.12_x86.config" >> $GITHUB_ENV
+            echo "TARGET_PATTERN=*squashfs-combined-*.img.gz" >> $GITHUB_ENV
+            echo "DIY_P2_SH=scripts/immortalwrt_25.12_x86.sh" >> $GITHUB_ENV
+          fi
 
-    - name: 3. 空间清理与 I/O 优化
-      uses: jlumbroso/free-disk-space@v1.3.1
-      with:
-        tool-cache: true
-        android: true
-        dotnet: true
-        haskell: true
-        large-packages: true
-        docker-images: true
-        swap-storage: true
+      - name: 3. 空间清理与 I/O 优化
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
 
-    - name: 4. 环境部署
-      run: |
-        export DEBIAN_FRONTEND=noninteractive
-        sudo -E apt-get -qq update
-        DEPS=$(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu || echo "")
-        if [ -z "$DEPS" ]; then
-          DEPS="ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex gawk gettext gcc-multilib g++-multilib git gnutls-dev golang-go gperf haveged help2man intltool lib32gcc-s1 libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply python3-docutils python3-pyelftools qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev zstd"
-        fi
-        sudo -E apt-get -qq install $DEPS -y
-        sudo -E apt-get -qq autoremove --purge && sudo -E apt-get -qq clean
-        sudo timedatectl set-timezone "$TZ"
+      - name: 4. 环境部署
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          sudo -E apt-get -qq update
+          DEPS=$(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu || echo "")
+          if [ -z "$DEPS" ]; then
+            DEPS="ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex gawk gettext gcc-multilib g++-multilib git gnutls-dev golang-go gperf haveged help2man intltool lib32gcc-s1 libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply python3-docutils python3-pyelftools qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev zstd"
+          fi
+          sudo -E apt-get -qq install $DEPS -y
+          sudo -E apt-get -qq autoremove --purge && sudo -E apt-get -qq clean
+          sudo timedatectl set-timezone "$TZ"
 
-    - name: 5. 克隆源码与环境准备
-      run: |
-        git clone -b $REPO_BRANCH --single-branch --depth 1 $REPO_URL $OPENWRT_NAME
-        echo "OPENWRT_PATH=${GITHUB_WORKSPACE}/${OPENWRT_NAME}" >> $GITHUB_ENV
-        cd $OPENWRT_NAME
-        echo "COMMIT_DATE=$(git show -s --date=short --format='%ci' | awk '{print $1}')" >> $GITHUB_ENV
-        echo "REPO_HASH=$(echo $REPO_URL | md5sum | head -c 8)" >> $GITHUB_ENV
+      - name: 5. 克隆源码与环境准备
+        run: |
+          git clone -b $REPO_BRANCH --single-branch --depth 1 $REPO_URL $OPENWRT_NAME
+          echo "OPENWRT_PATH=${GITHUB_WORKSPACE}/${OPENWRT_NAME}" >> $GITHUB_ENV
+          cd $OPENWRT_NAME
+          echo "COMMIT_DATE=$(git show -s --date=short --format='%ci' | awk '{print $1}')" >> $GITHUB_ENV
+          echo "REPO_HASH=$(echo $REPO_URL | md5sum | head -c 8)" >> $GITHUB_ENV
 
-    - name: 6. 缓存 dl 目录
-      uses: actions/cache@v4
-      with:
-        path: ${{ env.OPENWRT_PATH }}/dl
-        key: ${{ env.TARGET_ID }}-${{ env.REPO_BRANCH }}-dl-${{ hashFiles('**/scripts/feeds', '**/Makefile') }}
-        restore-keys: |
-          ${{ env.TARGET_ID }}-${{ env.REPO_BRANCH }}-dl-
+      - name: 6. 缓存 dl 目录
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.OPENWRT_PATH }}/dl
+          key: ${{ env.TARGET_ID }}-${{ env.REPO_BRANCH }}-dl-${{ hashFiles('**/scripts/feeds', '**/Makefile') }}
+          restore-keys: |
+            ${{ env.TARGET_ID }}-${{ env.REPO_BRANCH }}-dl-
 
-    - name: 7. 缓存管理 (CCache)
-      uses: HiGarfield/cachewrtbuild@main
-      with:
-        ccache: true
-        mixkey: ${{ env.REPO_BRANCH }}-${{ env.TARGET_ID }}
-        prefix: ${{ env.OPENWRT_PATH }}        
+      - name: 7. 缓存管理 (CCache)
+        uses: HiGarfield/cachewrtbuild@main
+        with:
+          ccache: true
+          mixkey: ${{ env.REPO_BRANCH }}-${{ env.TARGET_ID }}
+          prefix: ${{ env.OPENWRT_PATH }}
 
-    - name: 8. 插件集成与动态感知
-      env:
-        CCACHE_BASEDIR: ${{ github.workspace }}
-      run: |
-        cd ${{ env.OPENWRT_PATH }}
-        
-        # 强制设置 Go 全局代理
-        export GOPROXY=https://proxy.golang.org,direct
-        
-        FULL_VER=$(grep "VERSION_NUMBER:=" include/version.mk | grep -oE "[0-9][0-9.]*[0-9]" | head -n1)
-        [ -z "$FULL_VER" ] && FULL_VER=$(grep "VERSION_CODE:=" include/version.mk | cut -d'=' -f2 | tr -cd '0-9.' | head -c 10)
-        FULL_VER="${FULL_VER:-SNAPSHOT}"
-        SHORT_VER=$(echo "$FULL_VER" | cut -d'.' -f1,2)
-        echo "OWRT_REAL_VERSION=$FULL_VER" >> $GITHUB_ENV
-        echo "OWRT_VER_SHORT=$SHORT_VER" >> $GITHUB_ENV
-        
-        [ -f "$GITHUB_WORKSPACE/$DIY_P1_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P1_SH" && "$GITHUB_WORKSPACE/$DIY_P1_SH"
-        
-        ./scripts/feeds update -a
-        ./scripts/feeds install -a
-        
-        [ -d "$GITHUB_WORKSPACE/files" ] && mv "$GITHUB_WORKSPACE/files" files
-        [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ] && cp "$GITHUB_WORKSPACE/$CONFIG_FILE" .config
-        [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH" && "$GITHUB_WORKSPACE/$DIY_P2_SH"
-        
-        RAW_IP=$(grep -oE "((192\.168|10\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01]))\.[0-9]+\.[0-9]+)" package/base-files/files/bin/config_generate | head -n1)
-        FINAL_IP="${RAW_IP:-192.168.1.1}"
-        echo "DEFAULT_IP=$FINAL_IP" >> $GITHUB_ENV
+      - name: 8. 插件集成与动态感知
+        env:
+          CCACHE_BASEDIR: ${{ github.workspace }}
+        run: |
+          cd ${{ env.OPENWRT_PATH }}
+          export GOPROXY=https://proxy.golang.org,direct
+          FULL_VER=$(grep "VERSION_NUMBER:=" include/version.mk | grep -oE "[0-9][0-9.]*[0-9]" | head -n1)
+          [ -z "$FULL_VER" ] && FULL_VER=$(grep "VERSION_CODE:=" include/version.mk | cut -d'=' -f2 | tr -cd '0-9.' | head -c 10)
+          FULL_VER="${FULL_VER:-SNAPSHOT}"
+          SHORT_VER=$(echo "$FULL_VER" | cut -d'.' -f1,2)
+          echo "OWRT_REAL_VERSION=$FULL_VER" >> $GITHUB_ENV
+          echo "OWRT_VER_SHORT=$SHORT_VER" >> $GITHUB_ENV
+          [ -f "$GITHUB_WORKSPACE/$DIY_P1_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P1_SH" && "$GITHUB_WORKSPACE/$DIY_P1_SH"
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          [ -d "$GITHUB_WORKSPACE/files" ] && mv "$GITHUB_WORKSPACE/files" files
+          [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ] && cp "$GITHUB_WORKSPACE/$CONFIG_FILE" .config
+          [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH" && "$GITHUB_WORKSPACE/$DIY_P2_SH"
+          RAW_IP=$(grep -oE "((192\.168|10\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01]))\.[0-9]+\.[0-9]+)" package/base-files/files/bin/config_generate | head -n1)
+          FINAL_IP="${RAW_IP:-192.168.1.1}"
+          echo "DEFAULT_IP=$FINAL_IP" >> $GITHUB_ENV
+          echo "CONFIG_CCACHE=y" >> .config
+          make defconfig
+          make download -j16 || make download -j1
+          echo "🧹 开始针对性清理 dl 目录..."
+          rm -rf dl/go-mod-cache dl/cargo
+          [ -f "scripts/clean-dl.sh" ] && ./scripts/clean-dl.sh || true
+          find dl -size -1024c -delete
+          echo "📊 dl 目录缓存体积前 5 排行:"
+          (du -h dl/* 2>/dev/null | sort -rh 2>/dev/null | head -n 5) || true
 
-        echo "=========================================="
-        echo "✅ 识别到源码版本: $FULL_VER"
-        echo "✅ 匹配设备 ID: ${{ env.TARGET_ID }}"
-        echo "✅ 默认后台地址: $FINAL_IP"
-        echo "✅ 仓库识别码: ${{ env.REPO_HASH }}"
-        echo "=========================================="
+      - name: 9. 开始编译
+        id: compile
+        run: |
+          cd ${{ env.OPENWRT_PATH }}
+          echo "DATE=$(date +"%Y-%m-%d %H:%M")" >> $GITHUB_ENV
+          THREADS=$(nproc)
+          make -j$THREADS FORCE_UNSAFE_CONFIGURE=1 || {
+            echo "⚠️ 多线程失败，切单线程重组..."
+            make -j1 V=s FORCE_UNSAFE_CONFIGURE=1
+          }
+          echo "status=success" >> $GITHUB_OUTPUT
 
-        echo "CONFIG_CCACHE=y" >> .config
-        make defconfig
-        
-        # 极速并发下载，失败自动切单线程兜底
-        make download -j16 || make download -j1
-        
-        # 缓存极限瘦身
-        echo "🧹 开始针对性清理 dl 目录..."
-        rm -rf dl/go-mod-cache dl/cargo
-        
-        [ -f "scripts/clean-dl.sh" ] && ./scripts/clean-dl.sh || true
-        find dl -size -1024c -delete
-        
-        echo "📊 dl 目录缓存体积前 5 排行:"
-        (du -h dl/* 2>/dev/null | sort -rh 2>/dev/null | head -n 5) || true
-        echo "=========================================="
+      - name: 10. 整理产物
+        id: organize
+        if: steps.compile.outputs.status == 'success'
+        run: |
+          cd ${{ env.OPENWRT_PATH }}
+          mkdir -p $GITHUB_WORKSPACE/outputs
+          find bin/targets -type f -name "${{ env.TARGET_PATTERN }}" ! -name "*.json" ! -name "*.manifest" -exec cp -v {} $GITHUB_WORKSPACE/outputs/ \;
+          cd $GITHUB_WORKSPACE/outputs
+          if [ -n "$(ls -A . 2>/dev/null)" ]; then
+            sha256sum * > SHA256SUMS
+            echo "has_artifacts=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_artifacts=false" >> $GITHUB_OUTPUT
+          fi
 
-    - name: 9. 开始编译
-      id: compile
-      run: |
-        cd ${{ env.OPENWRT_PATH }}
-        echo "DATE=$(date +"%Y-%m-%d %H:%M")" >> $GITHUB_ENV
-        
-        THREADS=$(nproc)
-        echo "🚀 首次尝试线程数: $THREADS"
-        # 柔性编译策略：多线程失败自动切单线程 V=s
-        make -j$THREADS FORCE_UNSAFE_CONFIGURE=1 || {
-          echo "⚠️ 多线程爆内存或冲突失败，切单线程重组（这是保护机制，非致命）..."
-          make -j1 V=s FORCE_UNSAFE_CONFIGURE=1
-        }
-        
-        echo "status=success" >> $GITHUB_OUTPUT
+      - name: 11. 备份固件到 Artifacts
+        uses: actions/upload-artifact@v4
+        if: steps.compile.outputs.status == 'success' && steps.organize.outputs.has_artifacts == 'true'
+        with:
+          name: OpenWrt_firmware_${{ env.TARGET_ID }}_${{ env.OWRT_REAL_VERSION }}
+          path: ${{ github.workspace }}/outputs/
+          retention-days: 7
 
-    - name: 10. 整理产物
-      id: organize
-      if: steps.compile.outputs.status == 'success'
-      run: |
-        cd ${{ env.OPENWRT_PATH }}
-        mkdir -p $GITHUB_WORKSPACE/outputs
-        find bin/targets -type f -name "${{ env.TARGET_PATTERN }}" ! -name "*.json" ! -name "*.manifest" -exec cp -v {} $GITHUB_WORKSPACE/outputs/ \;
-        cd $GITHUB_WORKSPACE/outputs
-        if [ -n "$(ls -A . 2>/dev/null)" ]; then
-          sha256sum * > SHA256SUMS
-          echo "has_artifacts=true" >> $GITHUB_OUTPUT
-        else
-          echo "has_artifacts=false" >> $GITHUB_OUTPUT
-        fi
-
-    - name: 11. 备份固件到 Artifacts
-      uses: actions/upload-artifact@v4
-      if: steps.compile.outputs.status == 'success' && steps.organize.outputs.has_artifacts == 'true'
-      with:
-        name: OpenWrt_firmware_${{ env.TARGET_ID }}_${{ env.OWRT_REAL_VERSION }}
-        path: ${{ github.workspace }}/outputs/
-        retention-days: 7
-
-    - name: 12. 发布 Release 并自动清理
-      if: steps.compile.outputs.status == 'success' && steps.organize.outputs.has_artifacts == 'true' && !cancelled()
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        cd ${{ env.OPENWRT_PATH }}
-        TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" .config | cut -d'=' -f2 | tr -d '"')
-        TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" .config | cut -d'=' -f2 | tr -d '"')
-        
-        DEVICE="${{ env.TARGET_ID }}"
-        VERSION="${{ env.OWRT_REAL_VERSION }}"
-        TAG="${DEVICE}-v${VERSION}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
-        
-        TOTAL_BODY="🏷️ 版本: ${VERSION} | 📅 源码日期: ${{ env.COMMIT_DATE }} | 🏗️ 架构: ${TARGET_BOARD}/${TARGET_SUBTARGET} | 🌐 IP: ${{ env.DEFAULT_IP }}"
-        
-        cd $GITHUB_WORKSPACE/outputs
-        # 发布时标题自动剔除冗余的版本号，保持整洁
-        gh release create "$TAG" ./* --title "R${{ env.DATE }} - ${DEVICE}" --notes "$TOTAL_BODY"
-        
-        echo "=========================================="
-        echo "🧹 正在清理设备 [${DEVICE}] 的旧版本..."
-        
-        OLD_RELEASES=$(gh release list --limit 100 --json tagName -q '.[].tagName' | grep "^${DEVICE}-" | tail -n +4)
-        
-        if [ -n "$OLD_RELEASES" ]; then
-          for rel in $OLD_RELEASES; do
-            echo "🗑️ 正在尝试删除旧版本: $rel"
-            gh release delete "$rel" --yes --cleanup-tag || true
-          done
-          echo "✅ 清理流程结束"
-        else
-          echo "✨ 历史版本不多，跳过清理。"
-        fi
-        echo "=========================================="
+      - name: 12. 发布 Release 并自动清理
+        if: steps.compile.outputs.status == 'success' && steps.organize.outputs.has_artifacts == 'true' && !cancelled()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd ${{ env.OPENWRT_PATH }}
+          TARGET_BOARD=$(grep "CONFIG_TARGET_BOARD=" .config | cut -d'=' -f2 | tr -d '"')
+          TARGET_SUBTARGET=$(grep "CONFIG_TARGET_SUBTARGET=" .config | cut -d'=' -f2 | tr -d '"')
+          DEVICE="${{ env.TARGET_ID }}"
+          VERSION="${{ env.OWRT_REAL_VERSION }}"
+          TAG="${DEVICE}-v${VERSION}-b${{ github.run_number }}-$(date +%Y%m%d%H%M)"
+          TOTAL_BODY="🏷️ 版本: ${VERSION} | 🏗️ 架构: ${TARGET_BOARD}/${TARGET_SUBTARGET} | 🌐 IP: ${{ env.DEFAULT_IP }}"
+          cd $GITHUB_WORKSPACE/outputs
+          gh release create "$TAG" ./* --title "R${{ env.DATE }} - ${DEVICE}" --notes "$TOTAL_BODY"
+          echo "🧹 清理旧版本..."
+          OLD_RELEASES=$(gh release list --limit 100 --json tagName -q '.[].tagName' | grep "^${DEVICE}-" | tail -n +4)
+          if [ -n "$OLD_RELEASES" ]; then
+            for rel in $OLD_RELEASES; do
+              gh release delete "$rel" --yes --cleanup-tag ||
