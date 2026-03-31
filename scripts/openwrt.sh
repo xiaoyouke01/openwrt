@@ -132,8 +132,8 @@ git_sparse_clone main https://github.com/kenzok8/jell luci-app-homeproxy luci-ap
 
 # 7. 修复与优化编译环境
 # 禁用 Rust 的 LLVM 编译，节省 10GB+ 空间和大量时间
-#if [ -f feeds/packages/lang/rust/Makefile ]; then
-#    sed -i 's/ci-llvm=true/ci-llvm=false/g' feeds/packages/lang/rust/Makefile
-#fi
+if [ -f feeds/packages/lang/rust/Makefile ]; then
+    sed -i 's/ci-llvm=true/ci-llvm=false/g' feeds/packages/lang/rust/Makefile
+fi
 
 # 9. 其他
