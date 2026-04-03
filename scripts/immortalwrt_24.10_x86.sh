@@ -104,7 +104,7 @@ git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall
 # 添加上网时间控制
 #git clone --depth=1 -b main https://github.com/sirpdboy/luci-app-timecontrol package/luci-app-timecontrol
 # 添加ssrplus
-#git clone --depth=1 -b master https://github.com/fw876/helloworld package/luci-app-ssr-plus
+git clone --depth=1 -b master https://github.com/fw876/helloworld package/luci-app-ssr-plus
 # 添加中文版netdata
 #git clone --depth=1 -b master https://github.com/sirpdboy/luci-app-netdata package/luci-app-netdata
 # 添加应用管理
