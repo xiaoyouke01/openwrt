@@ -2,6 +2,13 @@
 
 # 1. 修改默认 IP
 sed -i '/lan)/s/192\.168\.[0-9.]*/192.168.100.253/' package/base-files/files/bin/config_generate
+# 修改默认 NTP 服务器
+sed -i 's/0.openwrt.pool.ntp.org/ntp.aliyun.com/g' package/base-files/files/bin/config_generate
+sed -i 's/1.openwrt.pool.ntp.org/ntp.tencent.com/g' package/base-files/files/bin/config_generate
+sed -i 's/2.openwrt.pool.ntp.org/cn.ntp.org.cn/g' package/base-files/files/bin/config_generate
+sed -i 's/3.openwrt.pool.ntp.org/edu.ntp.org.cn/g' package/base-files/files/bin/config_generate
+# 2. 修改默认时区为上海 (CST-8)
+sed -i "s/'UTC'/'CST-8'\n\t\tset system.@system[-1].timezone='Asia\/Shanghai'/g" package/base-files/files/bin/config_generate
 
 # 2.移除要替换的包
 #rm -rf feeds/luci/themes/luci-theme-argon
