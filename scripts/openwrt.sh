@@ -7,8 +7,10 @@ sed -i 's/0.openwrt.pool.ntp.org/ntp.aliyun.com/g' package/base-files/files/bin/
 sed -i 's/1.openwrt.pool.ntp.org/ntp.tencent.com/g' package/base-files/files/bin/config_generate
 sed -i 's/2.openwrt.pool.ntp.org/cn.ntp.org.cn/g' package/base-files/files/bin/config_generate
 sed -i 's/3.openwrt.pool.ntp.org/edu.ntp.org.cn/g' package/base-files/files/bin/config_generate
-# 2. 修改默认时区为上海 (CST-8)
+# 修改默认时区为上海 (CST-8)
 sed -i "s/'UTC'/'CST-8'\n\t\tset system.@system[-1].zonename='Asia\/Shanghai'/g" package/base-files/files/bin/config_generate
+# 替换所有可能的官方下载地址为中科大镜像
+sed -i 's/downloads.openwrt.org/mirrors.ustc.edu.cn\/openwrt/g' `find ./package -type f -name "*"`
 
 # 2.移除要替换的包
 #rm -rf feeds/luci/themes/luci-theme-argon
