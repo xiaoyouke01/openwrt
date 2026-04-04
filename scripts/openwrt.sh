@@ -8,9 +8,10 @@ sed -i 's/1.openwrt.pool.ntp.org/ntp.tencent.com/g' package/base-files/files/bin
 sed -i 's/2.openwrt.pool.ntp.org/cn.ntp.org.cn/g' package/base-files/files/bin/config_generate
 sed -i 's/3.openwrt.pool.ntp.org/edu.ntp.org.cn/g' package/base-files/files/bin/config_generate
 # 修改默认时区为上海 (CST-8)
-sed -i "s/'UTC'/'CST-8'\n\t\tset system.@system[-1].zonename='Asia\/Shanghai'/g" package/base-files/files/bin/config_generate
-# 替换所有可能的官方下载地址为中科大镜像
-sed -i 's/downloads.openwrt.org/mirrors.ustc.edu.cn\/openwrt/g' `find ./package -type f -name "*"`
+sed -i "s/set system.@system\[-1\].timezone='UTC'/set system.@system[-1].timezone='CST-8'\n\t\tset system.@system[-1].zonename='Asia\/Shanghai'/g" package/base-files/files/bin/config_generate
+# 强制还原 Shell 为 ash
+sed -i 's/\/usr\/bin\/zsh/\/bin\/ash/g' package/base-files/files/etc/passwd
+sed -i 's/\/bin\/zsh/\/bin\/ash/g' package/base-files/files/etc/passwd
 
 # 2.移除要替换的包
 #rm -rf feeds/luci/themes/luci-theme-argon
@@ -107,12 +108,17 @@ git clone --depth=1 -b main https://github.com/gdy666/luci-app-lucky package/luc
 git clone --depth=1 -b main https://github.com/sirpdboy/luci-app-advancedplus package/luci-app-advancedplus
 # 添加nikki
 git clone --depth=1 -b main https://github.com/nikkinikki-org/OpenWrt-nikki package/OpenWrt-nikki
-# 添加Passwall 及其依赖
-git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/passwall-packages
+# 添加Passwall及其依赖
+#git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/passwall-packages
 git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall package/luci-app-passwall
 #git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall2 package/luci-app-passwall2
+# 添加代理依赖
+git clone --depth=1 -b main https://github.com/free-diy/proxy package/proxy
+# 添加上网时间控制
+#git clone --depth=1 -b main https://github.com/sirpdboy/luci-app-timecontrol package/luci-app-timecontrol
 # 添加ssrplus
-git clone --depth=1 -b master https://github.com/fw876/helloworld package/luci-app-ssr-plus
+#git clone --depth=1 -b master https://github.com/fw876/helloworld package/luci-app-ssr-plus
+git_sparse_clone master https://github.com/fw876/helloworld luci-app-ssr-plus
 # 添加中文版netdata
 #git clone --depth=1 -b master https://github.com/sirpdboy/luci-app-netdata package/luci-app-netdata
 # 添加应用管理
