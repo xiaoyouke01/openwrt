@@ -110,15 +110,15 @@ git clone --depth=1 -b main https://github.com/sirpdboy/luci-app-advancedplus pa
 git clone --depth=1 -b main https://github.com/nikkinikki-org/OpenWrt-nikki package/OpenWrt-nikki
 # 添加Passwall及其依赖
 #git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/passwall-packages
-git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall package/luci-app-passwall
+#git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall package/luci-app-passwall
 #git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall2 package/luci-app-passwall2
-# 添加代理依赖
-git clone --depth=1 -b main https://github.com/free-diy/proxy package/proxy
+# 添加壁虎合集
+git clone --depth=1 -b main https://github.com/free-diy/all-proxy package/all-proxy
 # 添加上网时间控制
 #git clone --depth=1 -b main https://github.com/sirpdboy/luci-app-timecontrol package/luci-app-timecontrol
 # 添加ssrplus
 #git clone --depth=1 -b master https://github.com/fw876/helloworld package/luci-app-ssr-plus
-git_sparse_clone master https://github.com/fw876/helloworld luci-app-ssr-plus
+#git_sparse_clone master https://github.com/fw876/helloworld luci-app-ssr-plus
 # 添加中文版netdata
 #git clone --depth=1 -b master https://github.com/sirpdboy/luci-app-netdata package/luci-app-netdata
 # 添加应用管理
