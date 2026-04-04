@@ -43,7 +43,7 @@ git clone --depth=1 -b main https://github.com/sirpdboy/luci-app-advancedplus pa
 # 添加Passwall 及其依赖
 git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/passwall-packages
 git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall package/luci-app-passwall
-#git_sparse_clone main https://github.com/Openwrt-Passwall/openwrt-passwall2 package/luci-app-passwall2
+#git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall2 package/luci-app-passwall2
 # 添加ssrplus
 #git clone --depth=1 -b master https://github.com/fw876/helloworld package/luci-app-ssr-plus
 # 添加中文版netdata
