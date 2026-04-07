@@ -96,13 +96,13 @@ git clone --depth=1 -b main https://github.com/gdy666/luci-app-lucky package/luc
 # 添加系统高级设置
 git clone --depth=1 -b main https://github.com/sirpdboy/luci-app-advancedplus package/luci-app-advancedplus
 # 添加nikki
-#git clone --depth=1 -b main https://github.com/nikkinikki-org/OpenWrt-nikki package/OpenWrt-nikki
+git clone --depth=1 -b main https://github.com/nikkinikki-org/OpenWrt-nikki package/OpenWrt-nikki
 # 添加Passwall及其依赖
-#git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/passwall-packages
-#git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall package/luci-app-passwall
+git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/passwall-packages
+git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall package/luci-app-passwall
 #git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall2 package/luci-app-passwall2
 # 添加壁虎合集
-git clone --depth=1 -b main https://github.com/free-diy/all-proxy package/all-proxy
+#git clone --depth=1 -b main https://github.com/free-diy/all-proxy package/all-proxy
 # 添加上网时间控制
 #git clone --depth=1 -b main https://github.com/sirpdboy/luci-app-timecontrol package/luci-app-timecontrol
 # 添加ssrplus
@@ -116,7 +116,7 @@ git clone --depth=1 -b main https://github.com/free-diy/all-proxy package/all-pr
 
 # 6. 定制插件克隆 (iStore 特殊处理)
 # 添加openclash
-git_sparse_clone master https://github.com/vernesong/OpenClash luci-app-openclash
+#git_sparse_clone master https://github.com/vernesong/OpenClash luci-app-openclash
 # 添加taskplan定时设置插件
 git_sparse_clone main https://github.com/sirpdboy/luci-app-taskplan luci-app-taskplan
 # 添加设备关机功能
