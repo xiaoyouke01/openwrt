@@ -153,6 +153,4 @@ fi
 
 # 9. 其他
 # 专门针对 advancedplus 的流氓逻辑进行清洗
-if [ -f package/luci-app-advancedplus/root/etc/init.d/advancedplus ]; then
-    sed -i '/zsh/d' package/luci-app-advancedplus/root/etc/init.d/advancedplus
-fi
+[ -f package/luci-app-advancedplus/root/etc/init.d/advancedplus ] && sed -i '/zsh/d' package/luci-app-advancedplus/root/etc/init.d/advancedplus
