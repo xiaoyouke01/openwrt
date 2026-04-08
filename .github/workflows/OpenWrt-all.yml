@@ -10,7 +10,7 @@ on:
         type: choice
         options:
           - 'x86_24'
-          - 'mt798x_24'
+          - 'n60-pro_24'
           - 'x86_25'
           - 'openwrt'
 
@@ -47,12 +47,12 @@ jobs:
           echo "TARGET_PATTERN=*squashfs-combined-*.img.gz" >> $GITHUB_ENV
           echo "DIY_P2_SH=scripts/immortalwrt_24.10_x86.sh" >> $GITHUB_ENV
 
-        elif [[ "$ID" == "mt798x_24" ]]; then
+        elif [[ "$ID" == "n60-pro_24" ]]; then
           echo "REPO_URL=https://github.com/padavanonly/immortalwrt-mt798x-6.6" >> $GITHUB_ENV
           echo "REPO_BRANCH=openwrt-24.10-6.6" >> $GITHUB_ENV
-          echo "CONFIG_FILE=configs/immortalwrt_24.10_mt798x_armv8.config" >> $GITHUB_ENV
+          echo "CONFIG_FILE=configs/immortalwrt_24.10_netcore_n60-pro.config" >> $GITHUB_ENV
           echo "TARGET_PATTERN=*sysupgrade.bin" >> $GITHUB_ENV
-          echo "DIY_P2_SH=scripts/immortalwrt_24.10_mt798x_armv8.sh" >> $GITHUB_ENV
+          echo "DIY_P2_SH=scripts/immortalwrt_24.10_netcore_n60-pro.sh" >> $GITHUB_ENV
 
         elif [[ "$ID" == "x86_25" ]]; then
           echo "REPO_URL=https://github.com/immortalwrt/immortalwrt" >> $GITHUB_ENV
