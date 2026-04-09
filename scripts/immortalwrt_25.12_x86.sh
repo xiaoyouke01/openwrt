@@ -95,7 +95,7 @@ git clone --depth=1 -b master https://github.com/jerrykuku/luci-app-argon-config
 # 添加Lucky
 git clone --depth=1 -b main https://github.com/gdy666/luci-app-lucky package/lucky
 # 添加系统高级设置
-git clone --depth=1 -b main https://github.com/sirpdboy/luci-app-advancedplus package/luci-app-advancedplus
+git clone --depth=1 -b main https://github.com/free-diy/luci-app-advancedplus package/luci-app-advancedplus
 # 添加nikki
 git clone --depth=1 -b main https://github.com/nikkinikki-org/OpenWrt-nikki package/OpenWrt-nikki
 # 添加Passwall 及其依赖
@@ -138,6 +138,6 @@ git_sparse_clone master https://github.com/sirpdboy/luci-app-poweroffdevice luci
 
 # 9. 其他
 # 专门针对 advancedplus 的流氓逻辑进行清洗
-if [ -f package/luci-app-advancedplus/root/etc/init.d/advancedplus ]; then
-    sed -i '/zsh/d' package/luci-app-advancedplus/root/etc/init.d/advancedplus
-fi
+#if [ -f package/luci-app-advancedplus/root/etc/init.d/advancedplus ]; then
+#    sed -i '/zsh/d' package/luci-app-advancedplus/root/etc/init.d/advancedplus
+#fi
