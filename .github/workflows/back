@@ -6,7 +6,7 @@ on:
       target_device:
         description: '🎯 选择编译目标设备'
         required: true
-        default: 'x86_24'
+        default: 'x86_25'
         type: choice
         options:
           - 'x86_24'
@@ -30,6 +30,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      actions: write
 
     steps:
     - name: 1. 检出代码
@@ -233,7 +234,7 @@ jobs:
         gh release create "$TAG" ./* --title "R${{ env.DATE }} - ${DEVICE}" --notes "$TOTAL_BODY"
         
         echo "=========================================="
-        echo "🧹 正在清理设备 [${DEVICE}] 的旧版本..."
+        echo "🧹 正在清理设备 [${DEVICE}] 的旧 Release 版本..."
         OLD_RELEASES=$(gh release list --limit 100 --json tagName -q '.[].tagName' | grep "^${DEVICE}-" | tail -n +4)
         
         if [ -n "$OLD_RELEASES" ]; then
@@ -241,8 +242,38 @@ jobs:
             echo "🗑️ 正在尝试删除旧版本: $rel"
             gh release delete "$rel" --yes --cleanup-tag || true
           done
-          echo "✅ 清理流程结束"
+          echo "✅ Release 清理完成"
         else
           echo "✨ 历史版本不多，跳过清理。"
+        fi
+        echo "=========================================="
+
+    - name: 13. 清理同设备旧缓存 (Caches)
+      if: steps.compile.outputs.status == 'success' && !cancelled()
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "=========================================="
+        echo "🧹 正在清理设备 [${{ env.TARGET_ID }}] 的旧缓存..."
+        
+        # 获取当前设备相关的缓存 Key 列表（按创建时间从新到旧排序）
+        # 使用 jq 过滤出包含当前设备 ID 的缓存
+        CACHES=$(gh cache list --limit 100 --json key,createdAt -q '.[] | select(.key | contains("${{ env.TARGET_ID }}")) | .key')
+        
+        # 统计匹配到的缓存数量
+        COUNT=$(echo "$CACHES" | wc -w)
+        echo "🔍 找到 $COUNT 个相关缓存"
+        
+        # 如果缓存超过 2 个，则删除旧的
+        if [ "$COUNT" -gt 2 ]; then
+          # tail -n +3 表示跳过前两个（即保留最新的两个），提取剩下的旧缓存
+          OLD_CACHES=$(echo "$CACHES" | tail -n +3)
+          for cache in $OLD_CACHES; do
+            echo "🗑️ 正在删除旧缓存: $cache"
+            gh cache delete "$cache" || true
+          done
+          echo "✅ 旧缓存清理结束"
+        else
+          echo "✨ 缓存数量不多，无需清理。"
         fi
         echo "=========================================="
