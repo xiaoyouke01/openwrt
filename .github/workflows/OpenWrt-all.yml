@@ -40,6 +40,8 @@ jobs:
       run: |
         ID="${{ github.event.inputs.target_device }}"
         echo "TARGET_ID=$ID" >> $GITHUB_ENV
+        # 每周自动清理：生成年份+周数标识（如 2026-15），实现每周缓存自动过期
+        echo "WEEK_ID=$(date +'%Y-%V')" >> $GITHUB_ENV
 
         if [[ "$ID" == "x86_24" ]]; then
           echo "REPO_URL=https://github.com/immortalwrt/immortalwrt" >> $GITHUB_ENV
@@ -105,16 +107,18 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ${{ env.OPENWRT_PATH }}/dl
-        key: ${{ env.TARGET_ID }}-${{ env.REPO_BRANCH }}-dl-${{ hashFiles('openwrt/include/version.mk', 'openwrt/feeds.conf.default') }}
+        # 加入 WEEK_ID 实现每周自动失效
+        key: ${{ env.WEEK_ID }}-${{ env.TARGET_ID }}-${{ env.REPO_BRANCH }}-dl-${{ hashFiles('openwrt/include/version.mk', 'openwrt/feeds.conf.default') }}
         restore-keys: |
-          ${{ env.TARGET_ID }}-${{ env.REPO_BRANCH }}-dl-
+          ${{ env.WEEK_ID }}-${{ env.TARGET_ID }}-${{ env.REPO_BRANCH }}-dl-
 
     - name: 7. 缓存管理 (CCache)
       uses: HiGarfield/cachewrtbuild@main
       with:
         ccache: true
-        mixkey: ${{ env.REPO_BRANCH }}-${{ env.TARGET_ID }}
-        prefix: ${{ env.OPENWRT_PATH }}        
+        # 加入 WEEK_ID 确保 CCache 每周也同步刷新
+        mixkey: ${{ env.WEEK_ID }}-${{ env.REPO_BRANCH }}-${{ env.TARGET_ID }}
+        prefix: ${{ env.OPENWRT_PATH }}
 
     - name: 8. 插件集成与动态感知
       env:
@@ -161,7 +165,6 @@ jobs:
           echo "⚠️ j16 失败，降级至 j8 重试..."
           if ! make download -j8; then
             echo "❌ j8 依然失败，进入单线程详细日志模式 (V=s)..."
-            # 失败将直接中断 workflow 并显示 V=s 详细报错
             make download -j1 V=s
           fi
         fi
@@ -256,17 +259,12 @@ jobs:
         echo "=========================================="
         echo "🧹 正在清理设备 [${{ env.TARGET_ID }}] 的旧缓存..."
         
-        # 获取当前设备相关的缓存 Key 列表（按创建时间从新到旧排序）
-        # 使用 jq 过滤出包含当前设备 ID 的缓存
         CACHES=$(gh cache list --limit 100 --json key,createdAt -q '.[] | select(.key | contains("${{ env.TARGET_ID }}")) | .key')
         
-        # 统计匹配到的缓存数量
         COUNT=$(echo "$CACHES" | wc -w)
         echo "🔍 找到 $COUNT 个相关缓存"
         
-        # 如果缓存超过 2 个，则删除旧的
         if [ "$COUNT" -gt 2 ]; then
-          # tail -n +3 表示跳过前两个（即保留最新的两个），提取剩下的旧缓存
           OLD_CACHES=$(echo "$CACHES" | tail -n +3)
           for cache in $OLD_CACHES; do
             echo "🗑️ 正在删除旧缓存: $cache"
