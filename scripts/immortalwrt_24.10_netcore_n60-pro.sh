@@ -8,7 +8,7 @@ rm -rf feeds/luci/themes/luci-theme-argon
 rm -rf feeds/luci/applications/luci-app-argon-config
 rm -rf feeds/luci/applications/luci-app-openclash
 rm -rf feeds/luci/applications/luci-app-passwall
-rm -rf feeds/packages/lang/golang
+#rm -rf feeds/packages/lang/golang
 rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-libev,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,trojan-plus,tuic-client,v2ray-plugin,xray-plugin,geoview,shadow-tls}
 #rm -rf feeds/luci/applications/luci-app-netdata
 
@@ -86,27 +86,24 @@ function git_sparse_clone() {
 }
 
 # 4. 更新 golang 1.26 版本
-git clone --depth=1 -b 26.x https://github.com/sbwml/packages_lang_golang feeds/packages/lang/golang
+#git clone --depth=1 -b 26.x https://github.com/sbwml/packages_lang_golang feeds/packages/lang/golang
+
 # 5. 主题与常规插件
 # 添加argon主题
-git clone --depth=1 -b master https://github.com/jerrykuku/luci-theme-argon package/luci-theme-argon
-git clone --depth=1 -b master https://github.com/jerrykuku/luci-app-argon-config package/luci-app-argon-config
+#git clone --depth=1 -b master https://github.com/jerrykuku/luci-theme-argon package/luci-theme-argon
+#git clone --depth=1 -b master https://github.com/jerrykuku/luci-app-argon-config package/luci-app-argon-config
 # 添加Lucky
 git clone --depth=1 -b main https://github.com/gdy666/luci-app-lucky package/lucky
 # 添加系统高级设置
 git clone --depth=1 -b main https://github.com/free-diy/luci-app-advancedplus package/luci-app-advancedplus
 # 添加nikki
-git clone --depth=1 -b main https://github.com/nikkinikki-org/OpenWrt-nikki package/OpenWrt-nikki
-# 添加Passwall及其依赖
+#git clone --depth=1 -b main https://github.com/nikkinikki-org/OpenWrt-nikki package/OpenWrt-nikki
+# 添加Passwall 及其依赖
 git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/passwall-packages
-git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall package/luci-app-passwall
-#git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall2 package/luci-app-passwall2
-# 添加壁虎合集
-#git clone --depth=1 -b main https://github.com/free-diy/all-proxy package/all-proxy
-# 添加上网时间控制
-#git clone --depth=1 -b main https://github.com/sirpdboy/luci-app-timecontrol package/luci-app-timecontrol
+git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall package/passwall-luci
+#git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall2 package/passwall12-luci
 # 添加ssrplus
-#git clone --depth=1 -b master https://github.com/fw876/helloworld package/luci-app-ssr-plus
+#git clone --depth=1 -b master https://github.com/fw876/helloworld.git package/helloworld
 # 添加中文版netdata
 #git clone --depth=1 -b master https://github.com/sirpdboy/luci-app-netdata package/luci-app-netdata
 # 添加应用管理
