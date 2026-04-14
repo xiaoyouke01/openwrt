@@ -102,8 +102,6 @@ git clone --depth=1 -b main https://github.com/nikkinikki-org/OpenWrt-nikki pack
 git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/passwall-packages
 git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall package/passwall-luci
 #git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall2 package/passwall12-luci
-# 添加壁虎合集
-#git clone --depth=1 -b main https://github.com/free-diy/all-proxy package/all-proxy
 # 添加ssrplus
 git clone --depth=1 -b master https://github.com/fw876/helloworld.git package/helloworld
 # 添加中文版netdata
