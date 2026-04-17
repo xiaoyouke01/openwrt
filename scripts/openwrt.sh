@@ -117,6 +117,8 @@ git clone --depth=1 -b master https://github.com/fw876/helloworld.git package/he
 #git clone --depth=1 -b master https://github.com/destan19/OpenAppFilter package/OpenAppFilter
 # 添加momo
 #git clone --depth=1 -b main https://github.com/nikkinikki-org/OpenWrt-momo package/OpenWrt-momo
+# 添加壁虎合集
+#git clone --depth=1 -b main https://github.com/free-diy/all-proxy package/all-proxy
 
 # 6. 定制插件克隆 (iStore 特殊处理)
 # 添加openclash
