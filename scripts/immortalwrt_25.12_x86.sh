@@ -96,8 +96,6 @@ git clone --depth=1 -b master https://github.com/jerrykuku/luci-app-argon-config
 git clone --depth=1 -b main https://github.com/gdy666/luci-app-lucky package/lucky
 # 添加系统高级设置
 git clone --depth=1 -b main https://github.com/free-diy/luci-app-advancedplus package/luci-app-advancedplus
-# 添加nikki
-git clone --depth=1 -b main https://github.com/nikkinikki-org/OpenWrt-nikki package/OpenWrt-nikki
 # 添加Passwall 及其依赖
 #git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/passwall-packages
 #git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall package/passwall-luci
@@ -112,8 +110,9 @@ git clone --depth=1 -b main https://github.com/nikkinikki-org/OpenWrt-nikki pack
 #git clone --depth=1 -b main https://github.com/nikkinikki-org/OpenWrt-momo package/OpenWrt-momo
 # 添加壁虎合集
 git clone --depth=1 -b main https://github.com/free-diy/all-proxy package/all-proxy
-
-# 6. 定制插件克隆 (iStore 特殊处理)
+# 添加nikki
+#git clone --depth=1 -b main https://github.com/nikkinikki-org/OpenWrt-nikki package/OpenWrt-nikki
+git_sparse_clone main https://github.com/nikkinikki-org/OpenWrt-nikki luci-app-nikki mihomo-meta nikki
 # 添加openclash
 git_sparse_clone master https://github.com/vernesong/OpenClash luci-app-openclash
 # 添加taskplan定时设置插件
@@ -130,14 +129,17 @@ git_sparse_clone master https://github.com/sirpdboy/luci-app-poweroffdevice luci
 #git_sparse_clone https://github.com/stackia/rtp2httpd/tree/main/openwrt-support/luci-app-rtp2httpd
 #git_sparse_clone https://github.com/stackia/rtp2httpd/tree/main/openwrt-support/rtp2httpd
 
-# 7. 修复与优化编译环境
+# 6. 修复与优化编译环境
 # 禁用 Rust 的 LLVM 编译，节省 10GB+ 空间和大量时间
 #if [ -f feeds/packages/lang/rust/Makefile ]; then
 #    sed -i 's/ci-llvm=true/ci-llvm=false/g' feeds/packages/lang/rust/Makefile
 #fi
 
-# 9. 其他
+# 7. 其他
 # 专门针对 advancedplus 的流氓逻辑进行清洗
 #if [ -f package/luci-app-advancedplus/root/etc/init.d/advancedplus ]; then
 #    sed -i '/zsh/d' package/luci-app-advancedplus/root/etc/init.d/advancedplus
 #fi
+
+# 8. 删除多余的插件
+rm -rf package/all-proxy/mihomo
