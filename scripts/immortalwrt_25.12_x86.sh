@@ -97,7 +97,7 @@ git clone --depth=1 -b main https://github.com/gdy666/luci-app-lucky package/luc
 # 添加系统高级设置
 git clone --depth=1 -b main https://github.com/free-diy/luci-app-advancedplus package/luci-app-advancedplus
 # 添加大鹅
-git clone --depth=1 -b kix https://github.com/QiuSimons/luci-app-daed package/dae
+#git clone --depth=1 -b kix https://github.com/QiuSimons/luci-app-daed package/dae
 # 添加Passwall 及其依赖
 #git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/passwall-packages
 #git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall package/passwall-luci
