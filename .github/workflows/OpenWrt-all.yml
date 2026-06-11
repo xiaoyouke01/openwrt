@@ -94,6 +94,7 @@ jobs:
         sudo -E apt-get -qq install $DEPS -y
         sudo -E apt-get -qq autoremove --purge && sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
+        sudo npm install -g pnpm
 
     - name: 5. 克隆源码与环境准备
       run: |
