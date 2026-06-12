@@ -114,7 +114,7 @@ git clone --depth=1 -b main https://github.com/kenzok8/openwrt-daede package/ope
 git clone --depth=1 -b main https://github.com/free-diy/all-proxy package/all-proxy
 # 添加nikki
 #git clone --depth=1 -b main https://github.com/nikkinikki-org/OpenWrt-nikki package/OpenWrt-nikki
-git_sparse_clone main https://github.com/nikkinikki-org/OpenWrt-nikki luci-app-nikki mihomo-meta nikki
+#git_sparse_clone main https://github.com/nikkinikki-org/OpenWrt-nikki luci-app-nikki mihomo-meta nikki
 # 添加openclash
 git_sparse_clone master https://github.com/vernesong/OpenClash luci-app-openclash
 # 添加taskplan定时设置插件
@@ -144,5 +144,5 @@ git_sparse_clone master https://github.com/sirpdboy/luci-app-poweroffdevice luci
 #fi
 
 # 8. 删除多余的插件
-rm -rf package/all-proxy/mihomo
-rm -rf package/helloworld/mihomo
+#rm -rf package/all-proxy/mihomo
+#rm -rf package/helloworld/mihomo
