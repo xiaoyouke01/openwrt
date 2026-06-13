@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # 1. 修改默认 IP
-#sed -i '/lan)/s/192\.168\.[0-9.]*/10.31.2.251/' package/base-files/files/bin/config_generate
 sed -i 's/192\.168\.110\.1/10.31.2.251/g' package/base-files/files/bin/config_generate
+sed -i 's/192\.168\.6\.1/10.31.2.251/g' package/base-files/files/bin/config_generate
 
 # 2.移除要替换的包
 rm -rf feeds/luci/themes/luci-theme-argon
