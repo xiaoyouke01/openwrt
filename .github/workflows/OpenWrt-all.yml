@@ -41,7 +41,6 @@ jobs:
       run: |
         ID="${{ github.event.inputs.target_device }}"
         echo "TARGET_ID=$ID" >> $GITHUB_ENV
-        # 每周自动清理：生成年份+周数标识（如 2026-15），实现每周缓存自动过期
         echo "WEEK_ID=$(date +'%Y-%V')" >> $GITHUB_ENV
 
         if [[ "$ID" == "x86_24" ]]; then
@@ -93,6 +92,10 @@ jobs:
 
     - name: 4. 环境部署
       run: |
+        # 清理 Ubuntu 24.04 残留的超大无用目录，避免后期空间不足
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+        sudo docker image prune --all --force
+        
         export DEBIAN_FRONTEND=noninteractive
         sudo -E apt-get -qq update
         DEPS=$(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu || echo "")
@@ -116,7 +119,6 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ${{ env.OPENWRT_PATH }}/dl
-        # 加入 WEEK_ID 实现每周自动失效
         key: ${{ env.WEEK_ID }}-${{ env.TARGET_ID }}-${{ env.REPO_BRANCH }}-dl-${{ hashFiles('openwrt/include/version.mk', 'openwrt/feeds.conf.default') }}
         restore-keys: |
           ${{ env.WEEK_ID }}-${{ env.TARGET_ID }}-${{ env.REPO_BRANCH }}-dl-
@@ -125,7 +127,6 @@ jobs:
       uses: HiGarfield/cachewrtbuild@main
       with:
         ccache: true
-        # 加入 WEEK_ID 确保 CCache 每周也同步刷新
         mixkey: ${{ env.WEEK_ID }}-${{ env.REPO_BRANCH }}-${{ env.TARGET_ID }}
         prefix: ${{ env.OPENWRT_PATH }}
 
@@ -174,7 +175,10 @@ jobs:
           echo "⚠️ j16 失败，降级至 j8 重试..."
           if ! make download -j8; then
             echo "❌ j8 依然失败，进入单线程详细日志模式 (V=s)..."
-            make download -j1 V=s
+            make download -j1 V=s > download.log 2>&1 || {
+              tail -n 500 download.log
+              exit 1
+            }
           fi
         fi
         echo "✅ 源码下载成功"
@@ -198,8 +202,13 @@ jobs:
         echo "🚀 首次尝试线程数: $THREADS"
         # 柔性编译策略：失败自动切单线程保护
         make -j$THREADS FORCE_UNSAFE_CONFIGURE=1 || {
-          echo "⚠️ 多线程爆内存或冲突失败，正在以单线程详细模式重试..."
-          make -j1 V=s FORCE_UNSAFE_CONFIGURE=1
+          echo "⚠️ 多线程爆内存或冲突失败，正在以单线程重试 (日志已转存以防崩溃)..."
+          # 👇 修改：将 V=s 巨量输出写入文件，失败时只提取最后 2000 行
+          make -j1 V=s FORCE_UNSAFE_CONFIGURE=1 > build.log 2>&1 || {
+            tail -n 2000 build.log
+            echo "❌ 编译彻底失败，详细原因请查看上述日志尾部。"
+            exit 1
+          }
         }
         
         echo "status=success" >> $GITHUB_OUTPUT
@@ -273,8 +282,9 @@ jobs:
         COUNT=$(echo "$CACHES" | wc -w)
         echo "🔍 找到 $COUNT 个相关缓存"
         
-        if [ "$COUNT" -gt 2 ]; then
-          OLD_CACHES=$(echo "$CACHES" | tail -n +3)
+        # 👇 缓存配额保留1个
+        if [ "$COUNT" -gt 1 ]; then
+          OLD_CACHES=$(echo "$CACHES" | tail -n +2)
           for cache in $OLD_CACHES; do
             echo "🗑️ 正在删除旧缓存: $cache"
             gh cache delete "$cache" || true
