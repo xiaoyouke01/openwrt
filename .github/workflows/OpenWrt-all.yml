@@ -11,7 +11,7 @@ on:
         options:
           - 'x86_24'
           - 'n60-pro_24'
-          - 'n60-pro_de'
+          - 'n60-pro_daed'
           - 'x86_25'
           - 'openwrt'
 
@@ -57,12 +57,12 @@ jobs:
           echo "TARGET_PATTERN=*sysupgrade.bin" >> $GITHUB_ENV
           echo "DIY_P2_SH=scripts/immortalwrt_24.10_netcore_n60-pro.sh" >> $GITHUB_ENV
 
-        elif [[ "$ID" == "n60-pro_de" ]]; then
+        elif [[ "$ID" == "n60-pro_daed" ]]; then
           echo "REPO_URL=https://github.com/padavanonly/immortalwrt-mt798x-6.6" >> $GITHUB_ENV
           echo "REPO_BRANCH=openwrt-24.10-6.6" >> $GITHUB_ENV
-          echo "CONFIG_FILE=configs/netcore_n60_de.config" >> $GITHUB_ENV
+          echo "CONFIG_FILE=configs/netcore_n60_daed.config" >> $GITHUB_ENV
           echo "TARGET_PATTERN=*sysupgrade.bin" >> $GITHUB_ENV
-          echo "DIY_P2_SH=scripts/immortalwrt_24.10_de_netcore_n60-pro.sh" >> $GITHUB_ENV
+          echo "DIY_P2_SH=scripts/immortalwrt_24.10_daed_netcore_n60-pro.sh" >> $GITHUB_ENV
 
         elif [[ "$ID" == "x86_25" ]]; then
           echo "REPO_URL=https://github.com/immortalwrt/immortalwrt" >> $GITHUB_ENV
