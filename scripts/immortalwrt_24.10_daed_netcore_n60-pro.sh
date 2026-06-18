@@ -101,8 +101,10 @@ git clone --depth=1 -b 26.x https://github.com/sbwml/packages_lang_golang feeds/
 git clone --depth=1 -b main https://github.com/gdy666/luci-app-lucky package/lucky
 # 添加系统高级设置
 git clone --depth=1 -b main https://github.com/free-diy/luci-app-advancedplus package/luci-app-advancedplus
-# 添加大鹅
-git clone --depth=1 -b main https://github.com/kenzok8/openwrt-daede package/openwrt-daede
+# 添加kenzok8大鹅
+#git clone --depth=1 -b main https://github.com/kenzok8/openwrt-daede package/openwrt-daede
+# 添加QiuSimons大鹅
+git clone --depth=1 -b kix https://github.com/QiuSimons/luci-app-daed package/openwrt-daed
 # 添加nikki
 #git clone --depth=1 -b main https://github.com/nikkinikki-org/OpenWrt-nikki package/OpenWrt-nikki
 # 添加Passwall 及其依赖
