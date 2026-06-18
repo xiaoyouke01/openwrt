@@ -195,7 +195,7 @@ jobs:
         [ -f "scripts/clean-dl.sh" ] && ./scripts/clean-dl.sh || true
         find dl -mindepth 1 -size -1024c -delete 2>/dev/null || true
         
-        # 持对 dl 缓存结构的日志监控
+        # 对 dl 缓存结构的日志监控
         echo "📊 dl 目录缓存体积前 5 排行:"
         (du -h dl/* 2>/dev/null | sort -rh | head -n 5) 2>/dev/null || echo "dl 目录为空"
         echo "=========================================="
