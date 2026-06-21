@@ -8,7 +8,11 @@ rm -rf feeds/luci/themes/luci-theme-argon
 rm -rf feeds/luci/applications/luci-app-argon-config
 rm -rf feeds/luci/applications/luci-app-openclash
 rm -rf feeds/luci/applications/luci-app-passwall
-rm -rf feeds/packages/lang/golang
+rm -rf feeds/luci/applications/luci-app-dae
+rm -rf feeds/packages/net/dae
+rm -rf feeds/luci/applications/luci-app-daed
+rm -rf feeds/packages/net/daed
+#rm -rf feeds/packages/lang/golang
 rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-libev,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,trojan-plus,tuic-client,v2ray-plugin,xray-plugin,geoview,shadow-tls}
 #rm -rf feeds/luci/applications/luci-app-netdata
 
@@ -86,22 +90,25 @@ function git_sparse_clone() {
 }
 
 # 4. 更新 golang 1.26 版本
-git clone --depth=1 -b 26.x https://github.com/sbwml/packages_lang_golang feeds/packages/lang/golang
+#git clone --depth=1 -b 26.x https://github.com/sbwml/packages_lang_golang feeds/packages/lang/golang
 
 # 5. 主题与常规插件
 # 添加argon主题
-git clone --depth=1 -b master https://github.com/jerrykuku/luci-theme-argon package/luci-theme-argon
-git clone --depth=1 -b master https://github.com/jerrykuku/luci-app-argon-config package/luci-app-argon-config
+#git clone --depth=1 -b master https://github.com/jerrykuku/luci-theme-argon package/luci-theme-argon
+#git clone --depth=1 -b master https://github.com/jerrykuku/luci-app-argon-config package/luci-app-argon-config
 # 添加Lucky
 git clone --depth=1 -b main https://github.com/gdy666/luci-app-lucky package/lucky
 # 添加系统高级设置
 git clone --depth=1 -b main https://github.com/free-diy/luci-app-advancedplus package/luci-app-advancedplus
-# 添加nikki
-git clone --depth=1 -b main https://github.com/nikkinikki-org/OpenWrt-nikki package/OpenWrt-nikki
+# 添加kenzok8大鹅
+#git clone --depth=1 -b main https://github.com/kenzok8/openwrt-daede package/openwrt-daede
+# 添加QiuSimons大鹅
+git clone --depth=1 -b kix https://github.com/QiuSimons/luci-app-daed package/openwrt-daed
+git clone --depth=1 -b kix https://github.com/QiuSimons/luci-app-dae package/openwrt-dae
 # 添加Passwall 及其依赖
 git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/passwall-packages
 git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall package/passwall-luci
-#git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall2 package/passwall12-luci
+git clone --depth=1 -b main https://github.com/Openwrt-Passwall/openwrt-passwall2 package/passwall12-luci
 # 添加ssrplus
 git clone --depth=1 -b dev https://github.com/fw876/helloworld.git package/helloworld
 # 添加中文版netdata
@@ -112,8 +119,9 @@ git clone --depth=1 -b dev https://github.com/fw876/helloworld.git package/hello
 #git clone --depth=1 -b main https://github.com/nikkinikki-org/OpenWrt-momo package/OpenWrt-momo
 # 添加壁虎合集
 #git clone --depth=1 -b main https://github.com/free-diy/all-proxy package/all-proxy
-
-# 6. 定制插件克隆 (iStore 特殊处理)
+# 添加nikki
+#git clone --depth=1 -b main https://github.com/nikkinikki-org/OpenWrt-nikki package/OpenWrt-nikki
+git_sparse_clone main https://github.com/nikkinikki-org/OpenWrt-nikki luci-app-nikki mihomo-meta nikki
 # 添加openclash
 git_sparse_clone master https://github.com/vernesong/OpenClash luci-app-openclash
 # 添加taskplan定时设置插件
@@ -130,14 +138,18 @@ git_sparse_clone main https://github.com/linkease/istore luci
 #git_sparse_clone https://github.com/stackia/rtp2httpd/tree/main/openwrt-support/luci-app-rtp2httpd
 #git_sparse_clone https://github.com/stackia/rtp2httpd/tree/main/openwrt-support/rtp2httpd
 
-# 7. 修复与优化编译环境
+# 6. 修复与优化编译环境
 # 禁用 Rust 的 LLVM 编译，节省 10GB+ 空间和大量时间
 #if [ -f feeds/packages/lang/rust/Makefile ]; then
 #    sed -i 's/ci-llvm=true/ci-llvm=false/g' feeds/packages/lang/rust/Makefile
 #fi
 
-# 9. 其他
+# 7. 其他
 # 专门针对 advancedplus 的流氓逻辑进行清洗
 #if [ -f package/luci-app-advancedplus/root/etc/init.d/advancedplus ]; then
 #    sed -i '/zsh/d' package/luci-app-advancedplus/root/etc/init.d/advancedplus
 #fi
+
+# 8. 删除多余的插件
+#rm -rf package/all-proxy/mihomo
+rm -rf package/helloworld/mihomo
