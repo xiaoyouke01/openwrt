@@ -148,3 +148,14 @@ git_sparse_clone main https://github.com/sirpdboy/luci-app-taskplan luci-app-tas
 #if [ -f package/luci-app-advancedplus/root/etc/init.d/advancedplus ]; then
 #    sed -i '/zsh/d' package/luci-app-advancedplus/root/etc/init.d/advancedplus
 #fi
+
+
+# 10. 彻底破解 TTYD 免密码登录 (全局无视路径暴力替换)
+echo ">> 正在暴力修改 TTYD 免密登录..."
+# 1. 找到所有的 ttyd 默认配置文件，强制关闭密码要求
+find ./ -type f -name "ttyd" -path "*/etc/config/ttyd" -exec sed -i "s/option login '1'/option login '0'/g" {} +
+find ./ -type f -name "ttyd" -path "*/etc/config/ttyd" -exec sed -i "s|/bin/login|/bin/login -f root|g" {} +
+# 2. 找到所有的 ttyd 启动脚本，把写死的密码验证入口强行替换成免密入口
+find ./ -type f -name "ttyd" -path "*/etc/init.d/ttyd" -exec sed -i "s|/bin/login|/bin/login -f root|g" {} +
+# 3. 删掉源码自带的开机恢复脚本（防止开机时它又把密码给你加回去）
+find ./ -type f -name "*ttyd*" -path "*/etc/uci-defaults/*" -exec rm -f {} +
