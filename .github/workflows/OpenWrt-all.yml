@@ -143,8 +143,10 @@ jobs:
       run: |
         cd "${{ env.OPENWRT_PATH }}"
 
-        echo "🔍 正在动态扫描 Go 工具链限制..."
-        find . -type f -name "*.mk" -exec grep -l "GOTOOLCHAIN=local" {} + | xargs -r sed -i 's/GOTOOLCHAIN=local/GOTOOLCHAIN=auto/g' && echo "✅ Go 工具链限制已动态解除"
+        # 核心规避命令：动态模糊查找并彻底解除 Go 工具链硬限制
+        echo "🔍 正在全盘扫描并解锁 Go 工具链限制..."
+        find . -type f -name "*.mk" -exec grep -l "GOTOOLCHAIN=local" {} + | xargs -r sed -i 's/GOTOOLCHAIN=local/GOTOOLCHAIN=auto/g'
+        echo "✅ 所有潜在的 Go 工具链限制已动态解除"
         
         export GOTOOLCHAIN=auto
         export GOPROXY=https://proxy.golang.org,direct
@@ -165,8 +167,9 @@ jobs:
         [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ] && cp "$GITHUB_WORKSPACE/$CONFIG_FILE" .config
         [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH" && "$GITHUB_WORKSPACE/$DIY_P2_SH"
         
+        sed -i 's/192.168.1.1/192.168.100.252/g' package/base-files/files/bin/config_generate
         RAW_IP=$(grep -oE "((192\.168|10\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01]))\.[0-9]+\.[0-9]+)" package/base-files/files/bin/config_generate | head -n1)
-        FINAL_IP="${RAW_IP:-192.168.1.1}"
+        FINAL_IP="${RAW_IP:-192.168.100.252}"
         echo "DEFAULT_IP=$FINAL_IP" >> $GITHUB_ENV
 
         echo "=========================================="
@@ -211,7 +214,7 @@ jobs:
         
         THREADS=$(nproc)
         echo "🚀 首次尝试线程数: $THREADS"
-        # 柔性编译策略：失败自动切单线程保护
+        # 柔性编译策略：回归纯粹安全的编译指令
         make -j$THREADS FORCE_UNSAFE_CONFIGURE=1 || {
           echo "⚠️ 多线程爆内存或冲突失败，正在以单线程重试 (日志已转存以防崩溃)..."
           make -j1 V=s FORCE_UNSAFE_CONFIGURE=1 > build.log 2>&1 || {
