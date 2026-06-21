@@ -167,7 +167,6 @@ jobs:
         [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ] && cp "$GITHUB_WORKSPACE/$CONFIG_FILE" .config
         [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH" && "$GITHUB_WORKSPACE/$DIY_P2_SH"
         
-        sed -i 's/192.168.1.1/192.168.100.252/g' package/base-files/files/bin/config_generate
         RAW_IP=$(grep -oE "((192\.168|10\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01]))\.[0-9]+\.[0-9]+)" package/base-files/files/bin/config_generate | head -n1)
         FINAL_IP="${RAW_IP:-192.168.1.1}"
         echo "DEFAULT_IP=$FINAL_IP" >> $GITHUB_ENV
