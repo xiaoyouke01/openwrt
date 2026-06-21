@@ -142,6 +142,9 @@ jobs:
         CCACHE_BASEDIR: ${{ github.workspace }}
       run: |
         cd "${{ env.OPENWRT_PATH }}"
+
+        echo "🔍 正在动态扫描 Go 工具链限制..."
+        find . -type f -name "*.mk" -exec grep -l "GOTOOLCHAIN=local" {} + | xargs -r sed -i 's/GOTOOLCHAIN=local/GOTOOLCHAIN=auto/g' && echo "✅ Go 工具链限制已动态解除"
         
         export GOTOOLCHAIN=auto
         export GOPROXY=https://proxy.golang.org,direct
