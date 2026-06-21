@@ -143,11 +143,6 @@ jobs:
       run: |
         cd "${{ env.OPENWRT_PATH }}"
 
-        # 核心规避命令：动态模糊查找并彻底解除 Go 工具链硬限制
-        echo "🔍 正在全盘扫描并解锁 Go 工具链限制..."
-        find . -type f -name "*.mk" -exec grep -l "GOTOOLCHAIN=local" {} + | xargs -r sed -i 's/GOTOOLCHAIN=local/GOTOOLCHAIN=auto/g'
-        echo "✅ 所有潜在的 Go 工具链限制已动态解除"
-        
         export GOTOOLCHAIN=auto
         export GOPROXY=https://proxy.golang.org,direct
         
@@ -166,6 +161,11 @@ jobs:
         [ -d "$GITHUB_WORKSPACE/files" ] && mv "$GITHUB_WORKSPACE/files" files
         [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ] && cp "$GITHUB_WORKSPACE/$CONFIG_FILE" .config
         [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH" && "$GITHUB_WORKSPACE/$DIY_P2_SH"
+
+        # 核心规避命令：动态模糊查找并彻底解除 Go 工具链硬限制
+        echo "🔍 正在全盘扫描并解锁 Go 工具链限制..."
+        find . -type f -name "*.mk" -exec grep -l "GOTOOLCHAIN=local" {} + | xargs -r sed -i 's/GOTOOLCHAIN=local/GOTOOLCHAIN=auto/g'
+        echo "✅ 所有潜在的 Go 工具链限制已动态解除"
         
         RAW_IP=$(grep -oE "((192\.168|10\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01]))\.[0-9]+\.[0-9]+)" package/base-files/files/bin/config_generate | head -n1)
         FINAL_IP="${RAW_IP:-192.168.1.1}"
