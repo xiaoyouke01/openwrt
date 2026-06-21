@@ -1,4 +1,0 @@
-config ttyd
-	option interface 'loopback'
-	option command '/bin/login -f root'
-	option login '0'
