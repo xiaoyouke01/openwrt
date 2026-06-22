@@ -162,7 +162,7 @@ jobs:
         [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ] && cp "$GITHUB_WORKSPACE/$CONFIG_FILE" .config
         [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ] && chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH" && "$GITHUB_WORKSPACE/$DIY_P2_SH"
 
-        # 核心规避命令：动态模糊查找并彻底解除 Go 工具链硬限制
+        # 动态模糊查找并彻底解除 Go 工具链硬限制
         echo "🔍 正在全盘扫描并解锁 Go 工具链限制..."
         find . -type f -name "*.mk" -exec grep -l "GOTOOLCHAIN=local" {} + | xargs -r sed -i 's/GOTOOLCHAIN=local/GOTOOLCHAIN=auto/g'
         echo "✅ 所有潜在的 Go 工具链限制已动态解除"
@@ -213,7 +213,6 @@ jobs:
         
         THREADS=$(nproc)
         echo "🚀 首次尝试线程数: $THREADS"
-        # 柔性编译策略：回归纯粹安全的编译指令
         make -j$THREADS FORCE_UNSAFE_CONFIGURE=1 || {
           echo "⚠️ 多线程爆内存或冲突失败，正在以单线程重试 (日志已转存以防崩溃)..."
           make -j1 V=s FORCE_UNSAFE_CONFIGURE=1 > build.log 2>&1 || {
@@ -289,19 +288,34 @@ jobs:
         echo "=========================================="
         echo "🧹 正在清理设备 [${{ env.TARGET_ID }}] 的旧缓存..."
         
-        CACHES=$(gh cache list --limit 100 --json key,createdAt -q '.[] | select(.key | contains("${{ env.TARGET_ID }}")) | .key')
+        clean_cache() {
+          local TYPE=$1
+          local KEYWORD=$2
+          echo "▶️ 开始检查 $TYPE 缓存..."
+          
+          # 清理 dl 与 ccache 类型缓存
+          CACHES=$(gh cache list --limit 100 --json key,createdAt -q ". | sort_by(.createdAt) | reverse | .[].key | select(contains(\"${{ env.TARGET_ID }}\") and contains(\"$KEYWORD\"))")
+          
+          if [ -n "$CACHES" ]; then
+            COUNT=$(echo "$CACHES" | grep -c '^')
+            echo "🔍 找到 $COUNT 个 $TYPE 缓存"
+            if [ "$COUNT" -gt 1 ]; then
+              # 保留最新的 1 个，删除其余所有
+              OLD_CACHES=$(echo "$CACHES" | tail -n +2)
+              for cache in $OLD_CACHES; do
+                echo "🗑️ 正在删除旧 $TYPE 缓存: $cache"
+                gh cache delete "$cache" || true
+              done
+            else
+              echo "✨ 仅有 1 个，无需清理。"
+            fi
+          else
+            echo "🔍 找到 0 个 $TYPE 缓存"
+          fi
+        }
         
-        COUNT=$(echo "$CACHES" | wc -w)
-        echo "🔍 找到 $COUNT 个相关缓存"
+        clean_cache "dl源码" "-dl-"
+        clean_cache "ccache编译" "-cache-"
         
-        if [ "$COUNT" -gt 1 ]; then
-          OLD_CACHES=$(echo "$CACHES" | tail -n +2)
-          for cache in $OLD_CACHES; do
-            echo "🗑️ 正在删除旧缓存: $cache"
-            gh cache delete "$cache" || true
-          done
-          echo "✅ 旧缓存清理结束"
-        else
-          echo "✨ 缓存数量不多，无需清理。"
-        fi
+        echo "✅ 旧缓存清理结束"
         echo "=========================================="
