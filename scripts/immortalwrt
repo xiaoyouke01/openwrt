@@ -151,4 +151,4 @@ git_sparse_clone master https://github.com/sirpdboy/luci-app-poweroffdevice luci
 
 # 8. 删除多余的插件
 #rm -rf package/all-proxy/mihomo
-rm -rf package/helloworld/mihomo
+#rm -rf package/helloworld/mihomo
