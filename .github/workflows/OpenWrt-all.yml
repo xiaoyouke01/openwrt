@@ -293,29 +293,22 @@ jobs:
           local KEYWORD=$2
           echo "▶️ 开始检查 $TYPE 缓存..."
           
-          # 清理 dl 与 ccache 类型缓存
-          CACHES=$(gh cache list --limit 100 --json key,createdAt -q ". | sort_by(.createdAt) | reverse | .[].key | select(contains(\"${{ env.TARGET_ID }}\") and contains(\"$KEYWORD\"))")
+          # 直接提取包含设备名和关键词的所有缓存 Key
+          CACHES=$(gh cache list --limit 100 | grep "${{ env.TARGET_ID }}" | grep "$KEYWORD" | awk '{print $1}' || true)
           
           if [ -n "$CACHES" ]; then
-            COUNT=$(echo "$CACHES" | grep -c '^')
-            echo "🔍 找到 $COUNT 个 $TYPE 缓存"
-            if [ "$COUNT" -gt 1 ]; then
-              # 保留最新的 1 个，删除其余所有
-              OLD_CACHES=$(echo "$CACHES" | tail -n +2)
-              for cache in $OLD_CACHES; do
-                echo "🗑️ 正在删除旧 $TYPE 缓存: $cache"
-                gh cache delete "$cache" || true
-              done
-            else
-              echo "✨ 仅有 1 个，无需清理。"
-            fi
+            for cache in $CACHES; do
+              echo "🗑️ 正在删除旧 $TYPE 缓存: $cache"
+              gh cache delete "$cache" || true
+            done
+            echo "✅ $TYPE 旧缓存已全部清空"
           else
-            echo "🔍 找到 0 个 $TYPE 缓存"
+            echo "🔍 未发现历史 $TYPE 缓存"
           fi
         }
         
         clean_cache "dl源码" "-dl-"
         clean_cache "ccache编译" "-cache-"
         
-        echo "✅ 旧缓存清理结束"
+        echo "✅ 缓存清理步骤结束 (全新缓存将在稍后的 Post-run 阶段自动生成并上传)"
         echo "=========================================="
