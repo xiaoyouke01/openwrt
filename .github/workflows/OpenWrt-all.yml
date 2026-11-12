@@ -102,7 +102,7 @@ jobs:
         sudo apt-get purge -y rustc cargo libstd-rust-* || true
         sudo apt-get autoremove -y
 
-    - name: 4.2 安装 Rust 环境与 honk 专用 Nightly 工具链
+    - name: 4.2 安装 Rust 环境与通用 Nightly 工具链
       run: |
         if ! command -v rustup &> /dev/null; then
           curl --retry 3 --retry-delay 2 --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path
@@ -117,12 +117,12 @@ jobs:
         
         # 安装通用的 nightly 及 rust-src 组件（适配 honk 编译）
         echo "⏳ 正在安装通用的 nightly 及 rust-src..."
-        rustup toolchain install nightly
-        
+        rustup toolchain install nightly --component rust-src
+          
         # 验证版本
         rustc --version
         rustup toolchain list
-        
+
     - name: 5. 克隆源码与环境准备
       run: |
         git clone -b $REPO_BRANCH --single-branch --depth 1 $REPO_URL $OPENWRT_NAME
@@ -130,14 +130,6 @@ jobs:
         cd "$OPENWRT_NAME"
         echo "COMMIT_DATE=$(git show -s --date=short --format='%ci' | awk '{print $1}')" >> $GITHUB_ENV
         echo "REPO_HASH=$(echo $REPO_URL | md5sum | head -c 8)" >> $GITHUB_ENV
-
-#    - name: 6. 缓存 dl 目录
-#      uses: actions/cache@v4
-#      with:
-#        path: ${{ env.OPENWRT_PATH }}/dl
-#        key: ${{ env.WEEK_ID }}-global-${{ env.REPO_BRANCH }}-dl-${{ hashFiles('openwrt/include/version.mk', 'openwrt/feeds.conf.default') }}
-#        restore-keys: |
-#          ${{ env.WEEK_ID }}-global-${{ env.REPO_BRANCH }}-dl-
 
     - name: 7. 缓存管理 (CCache)
       uses: HiGarfield/cachewrtbuild@main
@@ -166,6 +158,12 @@ jobs:
         
         ./scripts/feeds update -a
         ./scripts/feeds install -a
+        
+        # 【关键修复】全局替换所有 rust-toolchain 及编译脚本中的过时 nightly 版本
+        echo "🔧 正在全局将所有 rust-toolchain 及脚本中的 nightly-2026-10-20 替换为 nightly..."
+        find . -type f -name "rust-toolchain*" -exec sed -i 's/nightly-2026-10-20/nightly/g' {} +
+        find . -type f -name "build.rs" -exec sed -i 's/nightly-2026-10-20/nightly/g' {} +
+        find . -type f -name "Cargo.toml" -exec sed -i 's/nightly-2026-10-20/nightly/g' {} +
         
         [ -d "$GITHUB_WORKSPACE/files" ] && mv "$GITHUB_WORKSPACE/files" files
         [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ] && cp "$GITHUB_WORKSPACE/$CONFIG_FILE" .config
