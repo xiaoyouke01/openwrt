@@ -115,9 +115,10 @@ jobs:
         echo "$HOME/.cargo/bin" >> $GITHUB_PATH
         export PATH="$HOME/.cargo/bin:$PATH"
         
-        # 【关键修复】安装 honk eBPF 编译强依赖的特定 nightly 版本及 rust-src 组件
-        echo "⏳ 正在安装 honk 专用 nightly-2026-10-20 及 rust-src..."
-        rustup toolchain install nightly-2026-10-20 --component rust-src
+        # 安装通用的 nightly 及 rust-src 组件（适配 honk 编译）
+        echo "⏳ 正在安装通用的 nightly 及 rust-src..."
+        rustup toolchain install nightly
+        
         # 验证版本
         rustc --version
         rustup toolchain list
