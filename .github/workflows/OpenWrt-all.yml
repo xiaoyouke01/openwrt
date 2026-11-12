@@ -102,12 +102,20 @@ jobs:
         sudo apt-get purge -y rustc cargo libstd-rust-* || true
         sudo apt-get autoremove -y
 
-    - name: 4.2 安装 Rust 工具链
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        toolchains: stable, nightly
-        components: rust-src
-
+    - name: 4.2 安装 Rust 环境并直接设置为最新稳定版 (stable)
+      run: |
+        if ! command -v rustup &> /dev/null; then
+        # 使用 --default-toolchain stable 自动获取并安装最新稳定版
+          curl --retry 3 --retry-delay 2 --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path
+        else
+        # 如果环境已存在 rustup，则更新并切换到 stable
+          rustup update stable
+          rustup default stable
+        fi
+        export PATH="$HOME/.cargo/bin:$PATH"
+          
+        # 验证当前的 Rust 版本，确保其满足构建要求
+        rustc --version
     - name: 5. 克隆源码与环境准备
       run: |
         git clone -b $REPO_BRANCH --single-branch --depth 1 $REPO_URL $OPENWRT_NAME
