@@ -100,7 +100,7 @@ jobs:
         fi
 
         echo "📦 安装编译依赖..."
-        timeout 900 sudo -E apt-get -qq install -y --no-install-recommends $APT_OPTS $DEPS
+        timeout 600 sudo -E apt-get install -y --no-install-recommends $APT_OPTS $DEPS
 
         echo "🧽 清理 APT 缓存与设置时区..."
         sudo -E apt-get -qq autoremove --purge -y $APT_OPTS && sudo -E apt-get -qq clean
