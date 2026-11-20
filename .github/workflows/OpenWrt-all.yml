@@ -78,7 +78,7 @@ jobs:
         set -e
         export DEBIAN_FRONTEND=noninteractive
 
-        echo "🛑 清理潜在 apt/dpkg 锁并停用后台自动更新..."
+        echo "🛑 清理潜在 apt/dpkg 锁并禁用 man-db 自动建库..."
         sudo systemctl stop unattended-upgrades apt-daily.service apt-daily-upgrade.service 2>/dev/null || true
         sudo killall -9 apt apt-get dpkg apt-cache 2>/dev/null || true
         sudo rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock /var/lib/apt/lists/lock
