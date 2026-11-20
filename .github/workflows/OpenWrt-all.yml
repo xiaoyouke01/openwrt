@@ -75,23 +75,40 @@ jobs:
 
     - name: 4. 环境部署
       run: |
-        # 清理 Ubuntu 24.04 残留的超大无用目录
-        sudo rm -rf /opt/hostedtoolcache/CodeQL
-        
+        set -e
         export DEBIAN_FRONTEND=noninteractive
-        sudo apt-get remove -y needrestart || true
-        
-        sudo -E apt-get -qq update
-        DEPS=$(curl -fsSL https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu || echo "")
 
-        sudo -E apt-get -qq install -y --no-install-recommends \
-          -o Dpkg::Options::="--force-confdef" \
-          -o Dpkg::Options::="--force-confold" \
-          $DEPS
-          
-        sudo -E apt-get -qq autoremove --purge && sudo -E apt-get -qq clean
+        echo "🛑 清理潜在 apt/dpkg 锁并停用后台自动更新..."
+        sudo systemctl stop unattended-upgrades apt-daily.service apt-daily-upgrade.service 2>/dev/null || true
+        sudo killall -9 apt apt-get dpkg apt-cache 2>/dev/null || true
+        sudo rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock /var/lib/apt/lists/lock
+        sudo dpkg --configure -a || true
+        echo "man-db man-db/auto-update boolean false" | sudo debconf-set-selections
+
+        echo "🧹 清理 CodeQL 目录..."
+        sudo rm -rf /opt/hostedtoolcache/CodeQL
+
+        APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
+
+        echo "🔄 更新软件源..."
+        timeout 300 sudo -E apt-get update $APT_OPTS || timeout 300 sudo -E apt-get update $APT_OPTS
+
+        echo "📥 获取编译依赖列表..."
+        DEPS=$(curl -fsSL --max-time 20 https://raw.githubusercontent.com/free-diy/openwrt/main/depends_ubuntu || echo "")
+        if [ -z "$DEPS" ]; then
+          DEPS="ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache clang cmake cpio curl device-tree-compiler dwarves ecj fastjar flex gawk gettext gcc-multilib g++-multilib git gnutls-dev golang-go gperf haveged help2man intltool lib32gcc-s1 libbpf-dev libc6-dev-i386 libclang-dev libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano ninja-build npm p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply python3-docutils python3-pyelftools qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev zstd"
+        fi
+
+        echo "📦 安装编译依赖..."
+        timeout 900 sudo -E apt-get -qq install -y --no-install-recommends $APT_OPTS $DEPS
+
+        echo "🧽 清理 APT 缓存与设置时区..."
+        sudo -E apt-get -qq autoremove --purge -y $APT_OPTS && sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
-        sudo npm install -g pnpm
+
+        echo "📦 安装 pnpm..."
+        timeout 180 sudo npm install -g pnpm --fetch-retries=3 --fetch-retry-mintimeout=5000
+        echo "✅ 第 4 步环境部署完成"
 
 
     - name: 5. 克隆源码与环境准备
